@@ -46,10 +46,10 @@ reading a document, writing a desc, deciding — belongs to agents.
 what the tool knows about every document and why.
 
 ```json
-{"path": "ACMECORP/Comptabilité/f.pdf", "pass": "2026-08-14-1",
+{"path": "Acme/Comptabilité/f.pdf", "pass": "2026-08-14-1",
  "triage": "route", "decision": "move|trash|tag|rename|none|unanswered",
  "reason": "…", "size": 48213, "mtime": 1754899200, "md5": "…"|null,
- "desc": "…"|null, "ids": {"siren": ["917963183"]}|null, "tags": […]|null,
+ "desc": "…"|null, "ids": {"siren": ["123456782"]}|null, "tags": […]|null,
  "date_doc": "YYYY-MM-DD"|null, "provenance": "pass"|"migrated"}
 ```
 
@@ -317,6 +317,24 @@ Ends with a **bilan**: what moved where (counts + samples), and the
 residues BY NAME → written `unanswered`, re-selected first at the next
 pass. Tell the user explicitly: continue in this same conversation, or in
 a fresh one — both work, memory.jsonl carries the state.
+
+## Publication scope and cleanliness
+
+The published skill is: `SKILL.md`, `SETUP.md`, `config.example.yaml`,
+`scripts/`. **`fixtures/`, `TRAPS.md` and `CONTRACTS.md` are development
+artifacts and are NEVER published** — the skill ships clean.
+
+Cleanliness is a hard rule for every v2 file, published or not:
+- Zero real-user data anywhere: no real person, company, place, email,
+  account or identifier — in code, comments, tests, fixtures or docs. The
+  v1 sources leak (a real company name in a fixture, a real SIREN and a
+  real syndic email in tests and comments): do NOT carry those tokens; keep
+  the lessons, replace the examples with invented ones.
+- Fixture identifiers are fictitious AND pass their validators (Luhn-valid
+  invented SIRENs, mod-97-valid invented IBANs) so the pipeline treats them
+  as real ids without naming anyone.
+- Before any publication: a sweep for personal markers over the exported
+  tree must return nothing. The marker list lives outside the repo.
 
 ## fixtures/build.py + TRAPS.md — no frozen test suite
 
