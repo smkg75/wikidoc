@@ -321,35 +321,39 @@ a fresh one — both work, memory.jsonl carries the state.
 ## Publication scope and cleanliness
 
 The published skill is: `SKILL.md`, `SETUP.md`, `config.example.yaml`,
-`scripts/`. **`fixtures/`, `TRAPS.md` and `CONTRACTS.md` are development
+`scripts/`. **`tests/` and `CONTRACTS.md` are development
 artifacts and are NEVER published** — the skill ships clean.
 
 Cleanliness is a hard rule for every v2 file, published or not:
 - Zero real-user data anywhere: no real person, company, place, email,
-  account or identifier — in code, comments, tests, fixtures or docs. The
+  account or identifier — in code, comments, tests or docs. The
   v1 sources leak (a real company name in a fixture, a real SIREN and a
   real syndic email in tests and comments): do NOT carry those tokens; keep
   the lessons, replace the examples with invented ones.
-- Fixture identifiers are fictitious AND pass their validators (Luhn-valid
+- Test-corpus identifiers are fictitious AND pass their validators (Luhn-valid
   invented SIRENs, mod-97-valid invented IBANs) so the pipeline treats them
   as real ids without naming anyone.
 - Before any publication: a sweep for personal markers over the exported
   tree must return nothing. The marker list lives outside the repo.
 
-## fixtures/build.py + TRAPS.md — no frozen test suite
+## tests/ — build.py + TRAPS.md, no frozen assertions, never a skill step
 
 There is deliberately NO regressions.py. v1's verify.py taught the lesson:
 a suite written by the code's author lies (its duplicate fixture was padded
 past the code's own threshold, and three green runs hid a dead guard).
 
 What ships instead:
-- **fixtures/build.py** — the booby-trapped corpus. Carry v1 traps (NFD,
+Nothing in the skill imports or invokes tests/ — it exists for the
+developer and the verification agents only, and never appears in SKILL.md
+or SETUP.md.
+
+- **tests/build.py** — the booby-trapped corpus. Carry v1 traps (NFD,
   case twins, cp437 zip, Icon\r, CON.pdf, >260 chars, typographic
   apostrophe, EDF re-download) and ADD: a dangling symlink, an image-only
   sensitive scan, an MM/YYYY rent receipt, byte-identical duplicates UNDER
   4096 bytes (unpadded), an inbox folder, an already-filed folder, a
   two-entity contract without a shared identifier.
-- **fixtures/TRAPS.md** — the manifest: one entry per trap, what it is,
+- **tests/TRAPS.md** — the manifest: one entry per trap, what it is,
   and what correct handling looks like — including the pinned v1 bugs
   (incremental memory + symlink survival, probe re-extraction + empty-text
   trash refusal, small duplicates detected, MM/YYYY parsed,
@@ -358,7 +362,7 @@ What ships instead:
   dead pointer).
 
 Verification is an AGENT's job, done freely and with fresh eyes: run the
-pipeline over the fixtures (WIKIDOC_HOME at a temp dir, never ~/.wikidoc)
+pipeline over the generated corpus (WIKIDOC_HOME at a temp dir, never ~/.wikidoc)
 and grade the outcome against TRAPS.md. The manifest is the contract; how
 to check it is the agent's judgement. Deterministic where being wrong is
 expensive (the corpus), model-driven where judgement matters (the grading).
