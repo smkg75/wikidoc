@@ -16,7 +16,7 @@ pattern.
 Three **steps** (verbs, executed, never imported):
 `collect.py` · `route.py` · `apply.py`.
 Three **libraries** (nouns, imported, never steps):
-`memory.py` · `content.py` · `enrich_macos.py`.
+`memory.py` · `extract.py` · `enrich_macos.py`.
 
 **A step never imports or invokes another step. Steps import libraries.**
 Scripts convert bytes and move files; they never interpret. Interpretation —
@@ -74,7 +74,7 @@ from v1 review.py, applied where the data enters.
 CLI: `stats`, `show <path|md5>`, `find <term>`. **No selection — memory.py
 chooses nothing.**
 
-### content.py — the library that reads bytes
+### extract.py — the library that reads bytes (imported, never a step)
 
 Why it exists: three consumers need to read file content — collect.py (mass
 extraction), apply.py (the sensitive probe re-reads text AND ids itself,
@@ -96,7 +96,7 @@ macOS-guarded), `extract_ids(text, cfg)`, `extract_dates(text)`,
   values.
 - Dates: v1 forms plus `MM/YYYY`. `doc_year` only from recognised dates,
   bounded 1900..current_year+1. Never a bare year harvested from text.
-- `WIKIDOC_MINIMAL=1`: pdf text/render unavailable. content.py returns None
+- `WIKIDOC_MINIMAL=1`: pdf text/render unavailable. extract.py returns None
   (distinct from ""), so callers mark `needs_vision` — minimal mode must
   NEVER quietly produce an empty text that passes for "read and empty".
 
@@ -260,7 +260,7 @@ The four v2 fixes:
    everywhere; a dangling symlink (`lexists` but not `exists`) = failed
    entry, the pass continues.
 3. **The sensitive probe trusts nothing**: text AND ids re-extracted from
-   the file via content.py. A trash entry whose re-extracted text is empty
+   the file via extract.py. A trash entry whose re-extracted text is empty
    and size > 1024 is REFUSED unless `reviewed: "vision"` — an agent
    asserting it read the render this pass.
 4. Entry validation up front: a decision on a path outside root, or an
@@ -318,22 +318,29 @@ residues BY NAME → written `unanswered`, re-selected first at the next
 pass. Tell the user explicitly: continue in this same conversation, or in
 a fresh one — both work, memory.jsonl carries the state.
 
-## fixtures/build.py + regressions.py
+## fixtures/build.py + TRAPS.md — no frozen test suite
 
-fixtures: carry v1 traps (NFD, case twins, cp437 zip, Icon\r, CON.pdf,
->260 chars, typographic apostrophe, EDF re-download) and ADD: a dangling
-symlink, an image-only sensitive scan, an MM/YYYY rent receipt,
-byte-identical duplicates UNDER 4096 bytes (unpadded — v1's fixture was
-padded past the threshold to dodge the bug), an inbox folder, an
-already-filed folder, a two-entity contract without a shared identifier.
+There is deliberately NO regressions.py. v1's verify.py taught the lesson:
+a suite written by the code's author lies (its duplicate fixture was padded
+past the code's own threshold, and three green runs hid a dead guard).
 
-regressions.py: runs the six-step pipeline over fixtures in
-full/minimal/bare modes and pins, at minimum: incremental memory + symlink
-survival (B1), probe re-extraction + empty-text trash refusal (B2), small
-duplicates detected (S1), MM/YYYY parsed (S3), accent-insensitive matching
-(S4), by_path index (S5), vision barrier blocks route, unanswered reported
-by name and re-selected first, bench archived not deleted, anchor check
-warns on a dead pointer. Header comment states plainly: green means the
-known bugs stayed fixed, nothing more. Exit non-zero on any failure. Drives
-the sibling scripts via subprocess with WIKIDOC_HOME pointed at a temp
-dir — never at `~/.wikidoc`.
+What ships instead:
+- **fixtures/build.py** — the booby-trapped corpus. Carry v1 traps (NFD,
+  case twins, cp437 zip, Icon\r, CON.pdf, >260 chars, typographic
+  apostrophe, EDF re-download) and ADD: a dangling symlink, an image-only
+  sensitive scan, an MM/YYYY rent receipt, byte-identical duplicates UNDER
+  4096 bytes (unpadded), an inbox folder, an already-filed folder, a
+  two-entity contract without a shared identifier.
+- **fixtures/TRAPS.md** — the manifest: one entry per trap, what it is,
+  and what correct handling looks like — including the pinned v1 bugs
+  (incremental memory + symlink survival, probe re-extraction + empty-text
+  trash refusal, small duplicates detected, MM/YYYY parsed,
+  accent-insensitive matching, by_path index, vision barrier, unanswered
+  by name and re-selected first, bench archived, anchor check warns on a
+  dead pointer).
+
+Verification is an AGENT's job, done freely and with fresh eyes: run the
+pipeline over the fixtures (WIKIDOC_HOME at a temp dir, never ~/.wikidoc)
+and grade the outcome against TRAPS.md. The manifest is the contract; how
+to check it is the agent's judgement. Deterministic where being wrong is
+expensive (the corpus), model-driven where judgement matters (the grading).
