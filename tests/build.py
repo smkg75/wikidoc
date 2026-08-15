@@ -57,7 +57,11 @@ def _pdf(path, lines, ops=None):
                                             .replace(b"(", b"[").replace(b")", b"]"))
             for i, l in enumerate(lines)) + b"\nET\n"
     else:
-        body = b"0.9 0.9 0.9 rg 40 40 500 760 re f\n"   # a grey rectangle: a scan
+        # a grey page: a scan. Padded with real drawing ops past collect's
+        # 1 KiB opaque gate — a sub-1 KiB "scan" is opaque, not needs_vision,
+        # and then nothing exercises the vision path.
+        body = (b"0.9 0.9 0.9 rg 40 40 500 760 re f\n"
+                + b"0.9 0.9 0.9 rg 40 40 500 760 re f\n" * 40)
     objs.append(b"<</Length %d>>stream\n" % len(body) + body + b"endstream")
     objs.append(b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>")
 
@@ -111,10 +115,14 @@ def build(target):
     # -- ordinary documents, so the rules have something to bite on ----------
     # Rent receipts whose ONLY date is MM/YYYY: doc_year must come from it,
     # or {doc_year} destinations never resolve (pinned v1 bug).
+    # Each receipt carries a distinct reference: same period + same issuer must
+    # NOT mean same bytes, or the duplicate guard fires where the manifest
+    # expects a route and the grader chases a phantom.
     for i in range(1, 6):
         rel = f"Docs/Loyer/quittance-{i:02d}.pdf"
         _pdf(os.path.join(target, rel),
              ["QUITTANCE DE LOYER", f"Periode : {i:02d}/2025",
+              f"Reference : QL-2025-{i:04d}",
               "Montant : 780,00 EUR", "Bailleur : AGENCE LUNARIA"])
         add(rel, "route", "rent-receipt rule; doc_year only from MM/YYYY",
             "rent-receipt")
@@ -158,14 +166,24 @@ def build(target):
     # -- residual: nothing to reason on --------------------------------------
     for i in range(1, 3):
         rel = f"Docs/Scans/scan-{i:02d}.pdf"
-        _pdf(os.path.join(target, rel), [])
+        # i extra rects: distinct bytes, or the duplicate guard fires where
+        # the manifest expects the vision path
+        _pdf(os.path.join(target, rel), None,
+             ops=b"0.9 0.9 0.9 rg 40 40 500 760 re f\n" * (40 + i))
         add(rel, "residual", "PDF with no text layer -> needs_vision + render")
-    for i in range(1, 3):
-        rel = f"Docs/Scans/photo-{i:02d}.jpg"
-        os.makedirs(os.path.dirname(os.path.join(target, rel)), exist_ok=True)
-        with open(os.path.join(target, rel), "wb") as f:
-            f.write(b"\xff\xd8\xff\xe0" + bytes([i]) * 2048)  # JPEG magic only
-        add(rel, "residual", "image: only an agent can open it")
+    # two broken "photos", one on each side of the 1 KiB gate: the small one
+    # is opaque no-content, the big one is needs_vision that no renderer and
+    # no reader will crack — a withdrawal, not a shrug
+    os.makedirs(os.path.join(target, "Docs/Scans"), exist_ok=True)
+    with open(os.path.join(target, "Docs/Scans/photo-01.jpg"), "wb") as f:
+        f.write(b"\xff\xd8\xff\xe0" + b"\x01" * 512)      # JPEG magic only
+    add("Docs/Scans/photo-01.jpg", "residual",
+        "under 1 KiB, no pixels: opaque no-content")
+    with open(os.path.join(target, "Docs/Scans/photo-02.jpg"), "wb") as f:
+        f.write(b"\xff\xd8\xff\xe0" + b"\x02" * 2048)
+    add("Docs/Scans/photo-02.jpg", "unanswered",
+        "garbage JPEG past 1 KiB: sips fails, Read fails -> withdrawal "
+        "with the attempts listed, retried next pass")
     write(os.path.join(target, "Docs/notes.txt"),
           "Reunion jeudi. Rien de plus.\n")
     add("Docs/notes.txt", "residual", "text, but no rule matches")
@@ -175,7 +193,10 @@ def build(target):
         with open(os.path.join(target, rel), "wb") as f:      # distinct bytes, so
             f.write(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"       # the duplicate guard
                     + bytes([i]) * 4096)                      # stays out of the way
-        add(rel, "residual", "legacy Word binary: no reader, no crash")
+        add(rel, "unanswered",
+            "legacy Word binary past 1 KiB: no extractor, no renderer -> "
+            "withdrawal; a trash on it is ALSO refused by the prose gate "
+            "(the text fallback yields replacement-char soup, not a reading)")
 
     # ======================= the traps ======================================
     # NFD in the name (macOS stores decomposed, everyone types composed)
@@ -241,7 +262,8 @@ def build(target):
             f.write(b"")
         traps["icon_cr"] = os.path.exists(icon)
         if traps["icon_cr"]:
-            add("Traps/Icon\r", "residual", "carriage return in the filename")
+            add("Traps/Icon\r", "propose", "carriage return in the filename; "
+                "zero-byte twin of vide.txt -> duplicate guard")
     except OSError:
         traps["icon_cr"] = False
 
@@ -268,7 +290,8 @@ def build(target):
 
     # zero-byte and huge-name files
     write(os.path.join(target, "Traps/vide.txt"), "")
-    add("Traps/vide.txt", "residual", "zero bytes")
+    add("Traps/vide.txt", "propose", "zero bytes, opaque no-content; "
+        "byte-identical to Icon\\r when that trap held -> duplicate guard")
     long_name = "Traps/" + "n" * 200 + ".txt"
     try:
         write(os.path.join(target, long_name), "nom tres long\n")
@@ -301,6 +324,7 @@ def build(target):
     # a rule matches — an inbox is emptied by decision, never silently.
     _pdf(os.path.join(target, "Inbox/quittance-avril.pdf"),
          ["QUITTANCE DE LOYER", "Periode : 04/2025",
+          "Reference : QL-2025-INBOX",
           "Montant : 780,00 EUR", "Bailleur : AGENCE LUNARIA"])
     add("Inbox/quittance-avril.pdf", "propose",
         "inbox guard beats a matching rule: propose, never a silent route")
@@ -315,10 +339,24 @@ def build(target):
         rel = f"Archive/Loyer/quittances-2025/quittance-{i + 10:02d}.pdf"
         _pdf(os.path.join(target, rel),
              ["QUITTANCE DE LOYER", f"Periode : {i:02d}/2025",
+              f"Reference : QL-2025-A{i + 10:03d}",
               "Montant : 780,00 EUR", "Bailleur : AGENCE LUNARIA"])
         add(rel, "route", "already at the rule's destination: no move, agreed",
             "rent-receipt")
     traps["already_filed"] = True
+
+    # a file past 1 KiB in a format NOTHING opens: no extractor, no renderer,
+    # no converter. The only correct exit is a withdrawal — decision
+    # "unanswered" with every attempt listed in `reason`, `lu` never set,
+    # re-selected first next pass. Anything else is either a lie (`lu` on an
+    # unread file) or a deadlock (the barrier blocking the whole pass).
+    os.makedirs(os.path.join(target, "Traps"), exist_ok=True)
+    with open(os.path.join(target, "Traps/donnees-brutes.xyz"), "wb") as f:
+        f.write(b"\x00\x07" + bytes(range(256)) * 8)
+    add("Traps/donnees-brutes.xyz", "unanswered",
+        "unreadable format past 1 KiB: real retry ladder, then withdrawal "
+        "with the attempts in reason; never a lu tag, never a barrier deadlock")
+    traps["unreadable_withdrawal"] = True
 
     # two entities named with equal strength and NO shared identifier: no
     # arithmetic can pick a winner, only reading can.

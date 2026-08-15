@@ -87,8 +87,9 @@ refuses to judge it while text is empty (vision barrier, exit 2); once a
 vision agent fills `text` from the render (`lu: "render"`), the sensitive
 guard fires → `propose`. A trash decision on it must be REFUSED by apply
 unless `reviewed: "vision"` — the probe re-extracts text and ids from the
-file itself and finds nothing, and empty text + size > 1024 is exactly the
-case v1 trashed blind.
+file itself and finds no language, and that is exactly the case v1 trashed
+blind. This one is READABLE: withdrawing it instead of reading the render
+is the lazy exit the ladder forbids.
 
 **MM/YYYY receipts** (`Docs/Loyer/quittance-01..05.pdf`,
 `Inbox/quittance-avril.pdf`) — pinned v1 bug: the only date in these files
@@ -131,11 +132,23 @@ Luhn-valid SIREN. Correct: id extracted and validated, entity resolved,
 `route` at strength 3. A grader may also plant a plausible-looking 9-digit
 number that fails Luhn anywhere in a file and check it is NOT an id.
 
-**Residual set** (`Docs/Scans/scan-*.pdf`, `photo-*.jpg`,
-`vieille-lettre-*.doc`, `Docs/notes.txt`) — no-text PDFs (needs_vision),
-JPEG magic with no pixels, legacy Word binaries, prose with no rule.
-Correct: no crash on any of them; nothing invented; they end `residual`
-or `needs_vision`, never routed on their names.
+**Residual set** (`Docs/Scans/scan-*.pdf`, `photo-01.jpg`, `Docs/notes.txt`)
+— no-text PDFs padded past 1 KiB (needs_vision + render), a sub-1 KiB
+garbage JPEG (`opaque: "no-content"`, never needs_vision), prose with no
+rule. Correct: no crash on any of them; nothing invented; never routed on
+their names.
+
+**Unreadable files → withdrawal** (`Traps/donnees-brutes.xyz`,
+`photo-02.jpg`, `vieille-lettre-*.doc` — all past 1 KiB, no extractor, no
+renderer, no converter) — the decision-1 trap. Correct: `needs_vision` with
+no render; the vision agent climbs the WHOLE ladder (render, `Read` on the
+original, `collect.py --render`, `sips`/conversion) and only then withdraws:
+`decision: "unanswered"` with a `reason` naming each attempt. `lu` is never
+set — it is a witness, not a checkbox. route counts them `withdrawn`, exits
+0 for the rest of the pass (no barrier deadlock), `--learn` archives the
+attempts in the memory line, and the next collect re-selects them FIRST.
+Wrong: a `lu` on an unread file, an exit-2 deadlock, or a withdrawal whose
+reason lists no attempts.
 
 ## Pipeline traps (pinned v1 bugs not tied to one file)
 
@@ -151,7 +164,16 @@ Correct: `Memory.by_path` keeps the LAST record per path;
 
 **Vision barrier** — run route while any entry still has
 `needs_vision: true` and empty text. Correct: exit 2 with the paths
-listed; no triage columns written for unread bytes.
+listed; no triage columns written for unread bytes. The ONLY way past is a
+withdrawal (`decision: "unanswered"` with the attempts in `reason`) — a
+withdrawn entry is exempt, counted `withdrawn`, and gets no triage.
+
+**Prose gate on the trash probe** — write a trash decision on
+`vieille-lettre-01.doc` without `reviewed: "vision"`. Correct: REFUSED —
+the probe's text fallback yields replacement-char soup, which is non-empty
+but fails `looks_like_prose`, and debris is not a reading. v1 passed
+exactly this trash. With `reviewed: "vision"` (an agent asserting it looked
+this pass) the same entry goes through.
 
 **Unanswered by name** — leave one selected file undecided through a full
 pass. Correct: `--learn` reports it BY NAME, writes its memory line with
