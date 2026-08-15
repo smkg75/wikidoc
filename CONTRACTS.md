@@ -3,8 +3,10 @@
 Frozen before implementation. Every author agent builds ONE file against this
 document. If a contract is wrong, report it back — do not silently deviate.
 
-Work happens IN THIS REPO on branch `v2`. `~/.wikidoc/` (production workspace)
-is READ-ONLY until the v2 cold test passes.
+Work happens IN THIS REPO on `main` — one branch, no feature branches: the
+repo has a single author who iterates in place. Every change ends with a
+commit AND a push to `origin/main` (github.com/smkg75/wikidoc, private).
+`~/.wikidoc/` is the production workspace and is never versioned here.
 
 Language: all code, comments and docs in English (the skill will be
 published). Python 3.9+ stdlib; optional deps (`pypdf`, `pypdfium2`,
