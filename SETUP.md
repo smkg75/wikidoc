@@ -3,119 +3,148 @@
 Read once in the life of an installation, then never again — which is why it is
 not in `SKILL.md`.
 
-The output is a `config.yaml` already filled from evidence found in the user's
-own documents, and a workspace ready for a first pass. Ten minutes.
-
-Work in `$WIKIDOC_HOME` (default `~/.wikidoc`); create it if it is missing.
+The output: a `config.yaml` filled from evidence found in the user's own
+documents, instruction files that point at the wiki instead of duplicating it,
+and a first real pass already run over Desktop and Downloads. Work in
+`$WIKIDOC_HOME` (default `~/.wikidoc`); create it if missing. Invoke scripts by
+absolute path from the skill directory, as `SKILL.md` says.
 
 ## 1. PROBE
 
-Find out what this machine can actually do, by trying it rather than by assuming
-from the platform name.
+Find out what this machine can do by trying it, not by assuming from the
+platform name.
 
 ```bash
 python3 -VV
 python3 -c "import importlib.util as u;print({m:bool(u.find_spec(m)) for m in ('yaml','pypdf','pypdfium2','send2trash','striprtf')})"
-python3 -c "import sys;print(sys.platform)"
 ```
 
 `yaml` is required (`python3 -m pip install --user pyyaml`; on a PEP 668 Python
 add `--break-system-packages`, or make a venv and use its interpreter). The
-other four are optional: without them PDFs land in the `residual` lane and
-removal falls back to a folder in the workspace, which is a slower pass, not a
+others are optional: without the PDF libraries, PDFs go through vision; without
+`send2trash`, removal falls back to a workspace folder. A slower pass, not a
 wrong one.
 
-Then probe the filesystem itself, in the user's document root. **Count the cloud
-placeholders first** — the other two probes create empty files, and empty files
-are exactly what that count looks for:
+Then the filesystem, in the user's document root. **Count the cloud
+placeholders FIRST** — the other probes create empty files, and empty files are
+exactly what that count looks for:
 
-- **cloud placeholders** — look for `.icloud` files or zero-byte stand-ins under
-  the root. Files that are not materialised have no bytes to classify.
-- **xattr round-trip** — write an extended attribute on a scratch file and read
-  it back. Success means Finder comments and tags will hold; failure means the
-  ledger is the only record, which is fine.
+- **cloud placeholders** — `.icloud` files or zero-byte stand-ins: files that
+  are not materialised have no bytes to classify.
+- **xattr round-trip** — write an extended attribute on a scratch file, read it
+  back. Failure means `memory.jsonl` is the only record, which is fine.
 - **case sensitivity** — create `.probe`, then try `.PROBE`. One file means the
   volume folds case, and two names differing only by case are one document.
 
 Done when each capability is a yes or a no you have observed, and the scratch
 files are gone.
 
-## 2. SEED
+## 2. SURVEY
 
-Write the smallest `config.yaml` that lets the pipeline run — `root`, the
-obvious `exclude` globs (version control, dependency folders, code checkouts),
-and `identifiers:` for whatever numbers identify a company or an account where
-the user lives. Only `iban` and `email` are built in; without a pattern for the
-local company number, step 3 has nothing to count. `config.example.yaml` holds
-the key names.
-
-Create empty `ledger.jsonl` and `journal.md` beside it.
-
-Done when `python3 scripts/ledger.py stats` prints an empty ledger without error.
-
-## 3. MINE
-
-Let the pipeline do the reading: `python3 scripts/prepare.py 300` extracts text,
-identifiers and dates from a real sample. Then read `batch/prep/*.json` and pull
-out:
-
-- identifiers by frequency — company numbers, tax ids, IBANs, and how many files
-  each appears in;
-- folders by volume, and which of them look like inboxes rather than homes;
-- recurring senders and document families (the same issuer, monthly);
-- the extensions that produced no text at all.
+Three Explore agents in parallel, one zone each: **Desktop**, **Downloads**,
+**Documents**. Each reports: volume (files, bytes), the document families that
+repeat (same issuer, monthly), folders that look like inboxes rather than
+homes, and every identifier pattern seen — company numbers, account numbers,
+tax ids — with rough counts. Nothing is moved, nothing is written.
 
 Done when you can name the top identifiers with their counts, the top folders
-with their file counts, and the document families that repeat.
+with their file counts, and the repeating families, for all three zones.
 
-## 4. GRILL
+## 3. GRILL
 
-Ask only what the evidence could not settle, and anchor every question in what
-you found — a question carrying its own count gets an answer, an abstract one
-gets a shrug.
+Interview the user, every question anchored in a count — a question carrying
+its own evidence gets an answer; an abstract one gets a shrug.
 
-> SIREN 123456789 appears in 47 files — which company is that, and which folder
-> should its documents live in?
-> 212 files sit on the Desktop — is that an inbox to empty, or a real workspace
-> to leave alone?
-> Payslips appear under two different names — same employer, or two?
+> One company number appears in 47 files — which company is that, and where do
+> its documents live?
+> 212 files sit on the Desktop — an inbox to empty, or a workspace to leave
+> alone?
+> Payslips appear under two employer names — same employer, or two?
 
-Cover: who the documents belong to — a person, a household, an employer, a
-company — and how each is recognised in the text; where each files; what counts
-as sensitive here; what to leave untouched; the tag taxonomy and its colours;
-the language summaries should be written in.
+Write `config.yaml` EARLY — after the first answers, not at the end — and
+re-grill from it: read it back block by block; every block the user corrects is
+a misunderstanding you almost shipped. Note context into `wiki/context.md` as
+it comes — who is who, which entity was live when — not into your own head.
 
-Most people have one or two entities and no company at all. An entity with no
-identifier is normal: it is recognised by a `match:` on the text instead.
+Cover: the entities and how each is recognised in text (most people have one or
+two and no company; an entity with no identifier is normal — it matches on
+text); what counts as sensitive here; what must never be touched; the tag
+taxonomy; the corpus language.
 
-Done when every open question has an answer, or is written into
-`wiki/index.md` as an open question with its date.
+Done when every open question is answered, or dated in `wiki/context.md`.
+
+## 4. LAYOUT
+
+The target tree — where documents will live. Offer three named options, then a
+free choice:
+
+- **by-entity** — one top folder per entity, life domains inside
+  (`Personal/Banking/`, `AcmeCorp/Accounting/`).
+- **by-domain** — one top folder per domain, entities inside
+  (`Banking/Personal/`, `Banking/AcmeCorp/`).
+- **flat-years** — shallow domains with years inside (`Taxes/2026/`), for a
+  small corpus.
+- **your own** — the user sketches it; restate it as a tree and have them
+  confirm.
+
+Then the inboxes, defaults on the table: **Downloads empty** (policy `empty` —
+everything files out), **Desktop transit** (policy `transit` — work in progress
+tolerated, residue proposed each pass), everything under Documents by entity.
+Store each answer in `inboxes:` — an inbox file is always proposed, never
+silently routed.
+
+Done when the tree is in config `layout:` and every inbox has a policy the user
+chose.
 
 ## 5. WRITE
 
-Fill `config.yaml` from the answers, using `config.example.yaml` as the shape —
-read it, do not copy it. Comments are part of the contract: the agent reads this
-file too, so write the `notes:` that a stranger would need.
+Finish `config.yaml` with `config.example.yaml` as the shape — read it, do not
+copy it; the comments are part of the contract. Each identifier from SURVEY
+gets a pattern and a `validate:` (`luhn`, `iban`, or `none`) — a candidate that
+fails its check is not an id. `anchors:` lists the user's instruction files so
+every pass checks their pointers. Seed rules from the SURVEY families, each
+born `status: shadow`, counters at 0, `learned_from` filled — evaluated every
+pass, never applied until the user promotes them. Create empty `memory.jsonl`;
+complete `wiki/context.md`.
 
-Seed the first rules from the document families found in MINE, each as
-`status: shadow` with `learned_from`, `passes: 0`, `hits: 0`, `agreed: 0`,
-`disagreed: 0`. A shadow rule is evaluated on every pass and never applied; it
-is put to the user once it has proved itself. Any other status makes the rule
-do nothing at all.
+Done when `config.yaml` parses, `memory.py stats` prints an empty memory, and
+everyone the user named has an entry under `entities:`.
 
-Then `wiki/index.md`: the entities, their periods, and the arbitrations already
-known. Clear the bench (`rm -r batch/*`) — the mining sample was not a pass, and
-nothing about it belongs in the ledger.
+## 6. ANCHOR
 
-Done when `config.yaml` parses, everyone and everything the user named has an
-entry under `entities:`, and `batch/` is empty.
+Audit the user's instruction files (CLAUDE.md, AGENTS.md…). Two kinds of lines:
 
-## 6. DRY RUN
+- **Process lines stay.** A hard rule gating an irreversible gesture —
+  "removal = OS bin only, never rm" — MUST stay in the instructions file: it
+  holds in sessions that never open the wiki.
+- **Corpus facts move** to `wiki/context.md` — who is who, which folder holds
+  what, entity histories. Each moved fact is replaced by a CONDITIONAL pointer,
+  "situation → path", never a bare link:
 
-`python3 scripts/prepare.py 50` then `python3 scripts/route.py --dry-run`.
+> Filing or searching personal documents → read `~/.wikidoc/wiki/context.md`.
+> A question about an entity's history → `~/.wikidoc/wiki/context.md`.
 
-Read the lanes out loud with the user: what routes, what is proposed, what falls
-to residual, and whether any sensitive file was about to route automatically.
+Back up the original to `<workspace>/legacy/` before touching it. Mechanically
+check every pointer — each backticked path must resolve. Show the user the full
+diff before writing anything.
 
-Done when the user recognises their own documents in the routing, and the run
-has touched nothing — verified by `ledger.jsonl` still being empty.
+Done when the instruction files hold process and pointers only, the backup
+exists, every pointer resolves, and the user approved the diff.
+
+## 7. FIRST SWEEP
+
+A real first pass, scoped to Desktop + Downloads. Full machinery, nothing
+weakened: Collect limited to the two zones, Vision on every unread scan, Route,
+Decide with the user answering blocking questions as they arise, the Apply
+dry-run read together, then `--execute`. Target: about 80% of both zones
+visibly emptied — the user should watch their Desktop change.
+
+End on a **bilan**: what moved where (counts plus a few sample paths), and the
+residues BY NAME — each one recorded `unanswered`, so the next pass selects it
+first and opens with its question.
+
+Then tell the user, explicitly: continue in this same conversation, or start a
+fresh one — both work, `memory.jsonl` carries the state.
+
+Done when the pass is archived under `logs/`, both zones are visibly thinner,
+and every residue is named in the bilan and recorded `unanswered`.

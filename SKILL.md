@@ -6,82 +6,86 @@ disable-model-invocation: true
 
 No `config.yaml` in the workspace (`$WIKIDOC_HOME`, default `~/.wikidoc`)? Read [`SETUP.md`](SETUP.md), run it, come back here.
 
-Filing is the means; a corpus that answers questions is the end. Every pass therefore ends with each file carrying what it is, and the **ledger** carrying why that was decided.
+Filing is the means; a corpus that answers questions is the end. Every pass ends with each file carrying what it is, and `memory.jsonl` carrying why that was decided. Query it anytime: `memory.py stats` · `show <path|md5>` · `find <term>` — memory answers, it never selects.
+
+Scripts live in `scripts/`, next to this file. Resolve this file's directory once and invoke every script by its **absolute path** (`python3 <skill-dir>/scripts/route.py`) — a relative invocation from the wrong cwd fails halfway through a pass. Long output goes to `bench/logs/`; read it paginated rather than re-running a script to see it again.
 
 ## Invariants
 
-- **Evidence** decides. What the bytes say classifies a document; the filename is hearsay. A rule that reads only a name is capped at the `propose` **lane** by `route.py`.
-- Read a file before the gesture that touches it. The `propose` and `residual` lanes exist for exactly that, and a summary you did not verify stays a summary, not a decision.
-- Removal goes to the OS bin, so every gesture is reversible. A sensitive document is never routed automatically and never binned — `apply.py` re-reads the file and refuses the line. It can still be filed and renamed, which is the point of sorting it.
+- **Evidence** decides. Strength 3 = a validated identifier read in the content, 2 = a name read in the content, 1 = path or filename only — hearsay. A rule matching only strength-1 conditions is capped at `propose`.
+- Read a file before the gesture that touches it. The `propose` and `residual` triages exist for exactly that.
+- Removal goes to the OS bin — every gesture is reversible. A sensitive document is never routed automatically and never trashed unread: `apply.py` re-reads the file itself and refuses the entry. It can still be filed and renamed, which is the point of sorting it.
 - Duplicates are byte-identical or they are not duplicates. Same text, different bytes is a re-download: diff in full before keeping one.
 - A move counts once it is re-stat'ed at its destination.
 
-## A pass
+## The working file: `bench/routing.json`
 
-Scripts live in `scripts/`, next to this file. Long output goes to `batch/logs/` — read it paginated rather than re-running a script to see it again.
+One entry per selected file; each actor writes only its columns; empty columns are the remaining work. `bench/` is the pass's working directory — archived to `logs/<pass>/` at Learn, never deleted.
 
-### 1. Prepare
+| columns | writer | step |
+|---|---|---|
+| `path size mtime md5 ext pages text truncated prose needs_vision render ids dates doc_year duplicate_of known_as known_desc opaque error` | collect.py | ① |
+| `text lu` (needs_vision entries only) | vision agent | ② |
+| `triage why guards rule entity strength destination shadow` | route.py | ③ |
+| `decision dst desc tags date_doc reviewed` | decide agent | ④ |
+| `result final` | apply.py | ⑤ |
 
-`python3 scripts/prepare.py [LIMIT]` selects the backlog, chunks it, extracts page-1 text, renders text-less scans to PNG, and flags byte-identical duplicates.
+## ① Collect
 
-Done when `sum_chunks == batch`, and `opaque` and `duplicates` are numbers you can explain from the corpus rather than from a failure.
+`collect.py` selects the pass — `memory.jsonl` is the seen-set. A file is a candidate when it has no memory line, its (size, mtime) changed with new content, or its last decision was `unanswered`. Order: unanswered first, then `inboxes:` files, then the rest; take `batch_size` (default 500). Extraction is page 1 only, ~4000 chars; no text and size > 1 KiB → `needs_vision` plus a page-1 PNG in `bench/renders/`. Byte-identical duplicates are grouped with no size threshold.
 
-### 2. Route
+Done when the counts in `bench/logs/collect.log` are numbers you can explain from the corpus, and every `needs_vision` entry has a render.
 
-`python3 scripts/route.py` puts every file in exactly one lane: `route` (a rule recognised it), `propose` (sensitive, duplicated, claimed by two entities at once, or matched on weak evidence), `residual` (nothing to reason on, or nothing matched), `skip` (this content is already in the ledger).
+## ② Vision
 
-Documents name several entities at once — an invoice from your company also carries your name — so the strongest **evidence** decides: an identifier read in the content beats a name printed on the page, which beats where the file happens to sit. The order entities appear in `config.yaml` decides nothing. Two entities tied at the top means the document belongs to both as far as the bytes go, and that goes to `propose`.
+An agent reads every `needs_vision` entry and fills `text` and `lu`: `"text"` (extracted layer sufficed) · `"render"` (read from the PNG) · `"pages N-M"` (escalated into the original). Escalation goes upward through readers, never around them: page-1 evidence → read targeted pages of the original (`Read`, or `collect.py --render <path> --pages A-B` where the harness cannot open it) → ask the user → record `unanswered`. No script ever interprets content.
 
-Done when `counts` covers every prepared file and no lane count surprises you. `--dry-run` prints the same routing and writes nothing.
+Done when no entry still has `needs_vision: true` with empty `text`.
 
-### 3. Decide
+## ③ Route
 
-The `route` lane needs confirming, the `propose` lane needs opening, the `residual` lane needs eyes.
+`route.py` gives every entry a triage: `route` (a rule recognised it), `propose` (needs eyes — sensitive, duplicated, tied entities, inbox, weak evidence, unresolved destination), `residual` (nothing matched), `skip` (content already in memory). It exits 2, paths listed, while any entry is unread — no judgement on unread bytes. Shadow rules predict before guards, so guards never blind learning.
 
-Chunks are cut by `prepare.py` before anything is routed, so one chunk mixes all three lanes. Read them however suits this session — directly, through subagents, or through a workflow — and answer for **every path in the chunk**, not only its residual files: `review.py` sends back any chunk with a gap.
+A document names several entities at once; the strongest evidence decides, config order decides nothing, and a tie goes to `propose`. An `inboxes:` file is always proposed, never silently routed. A destination variable that does not resolve ({doc_year} with no date) means the rule does not fire — never an `undated/` folder. All matching is accent- and case-insensitive.
 
-Whatever reads them writes **one JSON file per chunk** into `batch/vision/chunk-NNN.json`, a list of:
+Done when every entry has a triage and no count surprises you. This verb only writes columns in `bench/` — there is no `--dry-run` here; dry-run belongs to Apply alone.
 
-```json
-{"path": "/absolute/path", "desc": "one to three sentences, in the corpus language",
- "lu": "text|image|render", "date_doc": "2024-03-01", "ids": {"siren": ["123456789"]},
- "suggest": {"decision": "move|tag|trash|keep|rename", "destination": "...", "tag": "facture"}}
-```
+## ④ Decide
 
-Every entry needs `lu` filled in and a `desc` that says something the filename does not — those, plus the corpus language, are what `review.py` grades. It then names the chunks to run again — as a **new** run, since a resume replays the cached empty answer.
+The `route` triage needs confirming, `propose` opening, `residual` eyes. Fill `decision` (`move|trash|tag|rename|none`), `dst` (trailing `/` files into that folder; anything else is the full path, which is how a rename is written), a `desc` that says something the filename does not, `tags`, `date_doc` (never invented), and `reviewed: "vision"` when you read the render this pass — the sensitive probe requires it before trashing a file whose text will not extract.
 
-Route an entity by the identifiers read in the content, never by an agent's impression. A date absent from the document is not invented. Ask the user the questions the evidence cannot settle, at the moment they come up.
+Blocking questions go to the user during this step, at the moment they arise — never batched to the end. What stays unsettled is left undecided; Learn will record it.
 
-Done when `review.py` flags no chunk, every file has a decision, and each trash candidate has been confirmed against its content — not its name.
+Done when every entry has a decision, or a reason it does not that you can say out loud.
 
-### 4. Apply
+## ⑤ Apply
 
-Write `plan.json` (`moves`, `trash`, `tags`, `keep` — the shape is in `apply.py`'s docstring), then `python3 scripts/apply.py plan.json` for the **dry run**, and `--execute` once its output is what you meant. A `dst` ending in `/` files into that folder; anything else is the full path, which is how a rename is written.
+`apply.py` is dry-run by default: it prints every gesture and touches nothing. `--execute` once the printout matches intent — and the execution report must equal the dry-run report. Each successful action appends its memory line immediately and stamps `result`; a crash leaves both exactly at the interruption point, and `apply.py --resume` continues where `result` is missing. Trash goes to the OS bin (fallback `<workspace>/.trash/<pass>/`), collisions get `(2)`, nothing is clobbered. The sensitive probe trusts nothing from the bench: text and ids are re-extracted from the file itself. No `sensitive:` block in config → every trash is refused.
 
-Done when the dry run and the execution report the same counts, `failed` is 0, and every reported failure has been settled rather than skipped.
+Done when dry-run and execution report the same counts and `failed` is 0.
 
-### 5. Close
+## ⑥ Learn
 
-`python3 scripts/close.py` writes the ledger line for every remaining file — including the ones nothing happened to, whose reason is the thing the old pipeline never recorded — appends the journal, and clears the bench.
+`route.py --learn` closes the pass: scores every shadow rule against each file's final path, mines new candidates (the simplest form with zero counterexamples, born `status: shadow`), reports `ripe` rules, reports every `unanswered` file BY NAME and writes its memory line so the next pass selects it first, warns on dead `anchors:` pointers, archives `bench/` → `logs/<pass>/`. You then write the leftovers and their open questions into `wiki/state.md`.
 
-The journal takes only what the ledger cannot compute: arbitrations, incidents, promoted rules, open questions. Pass them as typed lines (`decision` · `rule` · `incident` · `question`) via `batch/journal.md` or `--note`.
+Done when `bench/` is gone from the workspace and every leftover is named in `wiki/state.md`.
 
-Done when `close.py` reports `bench: empty`; a populated `batch/` means the pass was interrupted.
+## Questions — three moments, never a fourth
 
-## What is fixed and what is yours
+- **Blocking** — during Decide, at the moment they arise.
+- **Rules** — at promotion, one at a time, counters and full-audit list attached.
+- **Leftovers** — written to `wiki/state.md` at Learn, asked at the next session start; their files are re-selected first.
 
-The scripts hold the parts where being wrong is expensive and judgement adds nothing: the gesture on disk, the state, the OS plumbing, and the **guards** — already-in-ledger, sensitive, byte-identical, two entities at once. Those are not configurable, and they run whatever `config.yaml` says.
+## Rules: born shadow, promoted by the user
 
-Everything about *your* documents is config, and all of it is optional. A config naming only `workspace:` and `root:` is a working install: no rule fires, every file reaches the `residual` lane, and you read them. Rules are an accelerator for what you have already decided twice — never a prerequisite. `verify.py --bare` runs the whole pipeline on exactly that config.
+A rule earns its way in; it is never handed over on the strength of looking right. Born `status: shadow` from `--learn` only, evaluated on every pass, never applied — passes, hits, agreed, **disagreed** accumulate in the rule itself. After ≥5 passes with zero disagreement:
 
-One consequence worth knowing: **nothing goes to the bin until `sensitive:` says what is protected.** A fresh install files and tags, and refuses every trash line in a plan.
+1. `route.py --audit <rule-id>` — replay against memory: retroactive precision on files already judged, diverging files listed. Cheap, read-only, runs anytime.
+2. `route.py --full-audit <rule-id>` — confront the whole disk, including what no pass ever judged. Beyond 500 candidates it says so and you sample. No ground truth here — the list is for human judgement.
+3. The user promotes, on that evidence: `status: active` plus a dated `history:` line. Refusal → history line, rewrite, `cycle: N+1`, counters reset.
 
-## After the pass
+Retired after 3 failed cycles, or 10 passes at 0 hits. A rule that keeps diverging is wrong about these documents — rewrite it or drop it.
 
-A rule earns its way in; it is never handed over on the strength of looking right. Write it as `status: shadow` and leave it alone: `route.py` evaluates it on every pass without ever applying it, and `close.py` compares what it proposed against what was actually decided. Passes, hits, agreements and **disagreements** accumulate in the rule itself.
+## The wiki
 
-Only a rule with enough passes, enough hits and zero disagreement is put to the user at close, with that record attached. One that keeps diverging is wrong about their documents — rewrite it or drop it. A rule still at 0 hits after ten passes is dead weight.
-
-When writing a candidate, take the discriminating phrases `close.py` measured — present in every file that went to one destination, in no other file of the pass — over a phrase that merely sounds right. "compte de gérance" reads like a rule for a rental property until it also matches the flat you rent yourself.
-
-`wiki/` holds what the corpus cannot say about itself: who is who, which entity was live in which period, which arbitration was made and why. The files answer factual questions through their annotations; the wiki answers relational ones. Start at `wiki/index.md` and split it as it grows.
+`wiki/` holds what the corpus cannot say about itself: who is who, which entity was live in which period, which arbitration was made and why. `context.md` carries the durable facts; `state.md` carries what the next session must pick up. Start there.

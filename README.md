@@ -43,7 +43,7 @@ kind of document doesn't need thinking about twice.
 | Place | Holds |
 |---|---|
 | **the skill** | the steps and the scripts — the same for everyone |
-| **your workspace** | `config.yaml` · `ledger.jsonl` · `journal.md` · `wiki/` — yours, in plain text |
+| **your workspace** | `config.yaml` · `memory.jsonl` · `logs/` · `wiki/` — yours, in plain text |
 
 The workspace is where your setup, your history and everything the agent learned
 about your documents lives. Copy it to another machine and you keep all of it.
@@ -62,14 +62,6 @@ Rules are optional. A config that says only where your documents live is a
 working install — every file goes to the careful lane and the agent reads it.
 You add a rule when you've decided the same thing twice, not before.
 
-`python3 scripts/verify.py` runs the whole pipeline against a booby-trapped
-corpus — decomposed filenames, case-only twins, byte-identical duplicates,
-re-downloads with identical text, text-less scans, reserved names, paths past
-260 characters. Then `--minimal` runs it again with every optional capability
-switched off, and `--bare` runs it on a config with no rules, no entities and no
-taxonomy at all. Portability and "works before you've configured anything" are
-checked the same way: by running, not by promising.
-
 ## 💻 Platforms
 
 macOS, Windows and Linux. Needs Python 3.9+ and PyYAML.
@@ -80,4 +72,4 @@ and removals land in a folder inside your workspace — slower, never destructiv
 
 On macOS it also writes Finder comments and tags, so Spotlight finds a document
 by what it says rather than what it's called. On Windows and Linux, search goes
-through the ledger instead (`ledger.py find <text>`).
+through the memory instead (`memory.py find <text>`).

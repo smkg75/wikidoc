@@ -10,7 +10,7 @@
 workspace: ~/.wikidoc
 root: ~/Documents
 language: fr                   # the language summaries are written in
-batch_size: 300
+batch_size: 500
 
 exclude:                        # glob patterns, matched against paths under root
   - "*/node_modules/*"
@@ -18,20 +18,53 @@ exclude:                        # glob patterns, matched against paths under roo
   - "Personal/Code/*"
   - "Work/mobile-app/*"        # a code checkout, not a document
 
-# Regexes that turn text into identifiers. Longest pattern wins first, so a
-# 14-digit SIRET is not also harvested as a 9-digit SIREN.
-identifiers:
-  siret: '\b\d{3}[ .]?\d{3}[ .]?\d{3}[ .]?\d{5}\b'
-  siren: '\b\d{3}[ .]?\d{3}[ .]?\d{3}\b'
-  vat: '\bFR\d{2}\d{9}\b'
+# Folders where files ARRIVE, not where they live. Anything found here is
+# proposed, never routed silently — the whole point of an inbox is that a
+# human meant to deal with it.
+#   empty    the folder should end up empty; leftovers are residues to report
+#   transit  files may sit here between sessions; only stale ones are raised
+inboxes:
+  - {path: ~/Downloads, policy: empty}
+  - {path: ~/Desktop, policy: transit}
 
-# Who a document can belong to. An entity is a person, a household, an employer,
-# a landlord, a company — whatever your documents are about. Most people have
-# one or two and no company at all; this whole block is optional.
+# The target tree, for the agent's eyes. Informational: nothing enforces it,
+# but destinations in rules and decisions should land inside these buckets.
+layout:
+  - Personal          # identity, housing, bank, health, work — one sub-folder each
+  - ACME              # the company, if you run one: accounting, legal, contracts
+  - Library           # books and references, not paperwork
+  - Resources         # templates, assets
+
+# Instruction files that cite paths (CLAUDE.md, AGENTS.md…). route.py --learn
+# extracts every backticked path they mention and warns when one no longer
+# resolves — a dead pointer is a fact that left the instructions and arrived
+# nowhere.
+anchors:
+  - ~/CLAUDE.md
+
+# Regexes that turn text into identifier CANDIDATES — validation decides.
+# Longest pattern wins first, so a 14-digit SIRET is not also harvested as a
+# 9-digit SIREN.
+#
+# `validate:` is why this block works at all: any 9 digits in a page match the
+# SIREN regex — a phone number, a postcode pair, half an amount. A checksum
+# (Luhn for SIREN/SIRET, mod-97 for IBAN) rejects almost all of those for
+# free, so a candidate failing its check is NOT an identifier. `none` keeps a
+# pattern match-only when no checksum exists.
+identifiers:
+  siret: {pattern: '\b\d{3}[ .]?\d{3}[ .]?\d{3}[ .]?\d{5}\b', validate: luhn}
+  siren: {pattern: '\b\d{3}[ .]?\d{3}[ .]?\d{3}\b', validate: luhn}
+  iban: {pattern: '\b[A-Z]{2}\d{2}[ ]?[\dA-Z][\dA-Z ]{10,30}\b', validate: iban}
+  vat: {pattern: '\bFR\d{2}\d{9}\b', validate: none}
+  # e.g. FR3111111222220000098765432 passes mod-97; 452000003 passes Luhn.
+
+# Who a document can belong to. An entity is a person, a household, an
+# employer, a landlord, a company — whatever your documents are about. Most
+# people have one or two and no company at all; this whole block is optional.
 #
 # An entity is recognised either by an `ids:` value found in the text, or by a
-# `match:` condition (same vocabulary as a rule's `when:`). Give it a `bucket:`
-# only if you want `{entity}` usable in a destination.
+# `match:` condition (same vocabulary as a rule's `when:`). Give it a
+# `bucket:` only if you want `{entity}` usable in a destination.
 #
 # Documents name several entities at once, so the STRONGEST evidence wins:
 #   3  an `ids:` value read in the content        (company number, account ref)
@@ -45,7 +78,7 @@ entities:
     bucket: Personal
     notes: >
       Everything addressed to me personally. My name is spelled two ways across
-      documents, hence the two variants.
+      documents, hence the two variants. No identifier: people rarely have one.
 
   - name: My landlord
     ids: ["4471120"]            # the tenant reference printed on every statement
@@ -53,16 +86,17 @@ entities:
     notes: The reference stays the same across agencies; the agency name does not.
 
   - name: ACME
-    ids: ["123456789", "12345678900021"]
+    ids: ["452000003", "45200000300007"]   # SIREN + SIRET, both Luhn-valid
     bucket: ACME
     notes: >
       Only if you run a company. Trade name differs from the legal entity — both
       appear in documents, and the bank statements use the legal one. Employee
-      papers follow the entity of the period, not the person: the same employee
-      moved between entities in 2024.
+      papers follow the entity of the period, not the person.
 
 # Guards, not rules: these run ahead of everything and cannot be overridden.
-# A match forces the propose lane, and makes the file untrashable.
+# A match forces the propose lane, and makes the file untrashable. Remove this
+# block entirely and apply.py refuses EVERY trash — absence of a guard is not
+# consent.
 sensitive:
   text_contains_any: [passeport, carte d'identité, relevé d'identité bancaire,
                       iban, bulletin de paie, résultats d'analyses, ordonnance]
@@ -78,73 +112,97 @@ tags:
   identité: 2       # green
   santé: 4          # blue
 
-# Combien une regle shadow doit avoir prouve avant d'etre soumise.
-rules_review:
-  min_passes: 2
+# What a shadow rule must have proven before --learn reports it as ripe, and
+# when a failing one is retired.
+learning:
+  min_passes: 5
   min_hits: 5
-
-review:
-  banned_phrases: ["ce document semble", "il s'agit probablement",
-                   "this document appears to"]
+  max_cycles: 3          # refused and rewritten this many times = retired
+  dead_after_passes: 10  # this many passes at 0 hits = dead, retired
 
 rules:
-  # First match wins among ACTIVE rules, so order matters: specific above general.
+  # First match wins among ACTIVE rules, so order matters: specific above
+  # general. Lifecycle — every step below is visible in the fields:
   #
-  # `status: shadow` is where a rule starts and usually stays for a while. It is
-  # evaluated every pass and never applied; close.py scores what it proposed
-  # against what was decided and fills in passes / hits / agreed / disagreed.
-  # It is put to you only once it has passes, hits, and zero disagreement.
+  #   born     only route.py --learn creates a rule, always `status: shadow`,
+  #            `cycle: 1`, counters at 0, `learned_from` saying which pass and
+  #            what evidence. Never write one by hand into `active`.
+  #   earn     each pass, the shadow's prediction is compared with where the
+  #            file FINALLY went: passes/hits/agreed/disagreed accumulate.
+  #            Ripe = min_passes AND min_hits reached, disagreed == 0.
+  #   audit    `route.py --audit <id>` replays it against memory (retroactive
+  #            precision on judged files), then `--full-audit <id>` lists
+  #            everything it would touch on the WHOLE disk, judged or not.
+  #   promote  the USER validates the full-audit list; the agent flips
+  #            `status: active` and appends a dated line to `history:`.
+  #   refuse   dated history line, the rule is rewritten, `cycle: N+1`,
+  #            counters reset to 0 — it earns its place again from scratch.
+  #   retire   after `max_cycles` failed cycles, or `dead_after_passes`
+  #            passes at 0 hits.
   - id: rent-receipt
-    status: active            # promoted after 4 passes with no divergence
-    learned_from: 2026-08-08
-    passes: 4
-    hits: 47                  # bumped by route.py — 0 after ten passes means dead
-    agreed: 47
+    status: active            # shadow | active — anything else = warning + inert
+    cycle: 1
+    passes: 6
+    hits: 41
+    agreed: 41
     disagreed: 0
+    learned_from: "2026-08-14-1: 9 moves to Personal/Housing/rent-receipts-2026/"
+    history:
+      - "2026-09-02 promoted: 6 passes, 41/41 agreed, full-audit list validated"
     when:
       all:
         - text_contains_any: [quittance de loyer]
         - has_text: true
-    level: route
-    tag: facture
+    tags: [facture]
     destination: "Personal/Housing/rent-receipts-{doc_year}"
 
   - id: acme-invoice
     status: shadow            # still earning its place
-    learned_from: 2026-08-08
-    passes: 1
+    cycle: 1
+    passes: 2
     hits: 6
     agreed: 6
     disagreed: 0
+    learned_from: "2026-08-14-1: 6 moves to ACME/Accounting/invoices-2026/"
+    history: []
     when:
       all:
         - text_contains_any: [facture]
-        - ids_any: ["123456789"]
-    level: route
-    tag: facture
+        - ids_any: ["452000003"]
+    tags: [facture]
     destination: "{entity}/Accounting/invoices-{doc_year}"
 
   - id: bank-statement
     status: shadow
-    learned_from: 2026-08-09
-    passes: 2
-    hits: 9
-    agreed: 7
-    disagreed: 2             # diverge deux fois : a reecrire avant promotion
+    cycle: 2                  # refused once: matched account-closing letters too
+    passes: 1
+    hits: 3
+    agreed: 3
+    disagreed: 0
+    learned_from: "2026-08-14-1: 9 moves to Personal/Bank/2026/"
+    history:
+      - "2026-09-02 refused: also matched account-closing letters; rewritten, cycle 2"
     when:
       all:
         - text_contains_any: [relevé de compte]
-        - not: {text_contains_any: [relevé d'identité bancaire]}
-    level: propose            # money: a human confirms before anything moves
+        - not: {text_contains_any: [relevé d'identité bancaire, clôture de compte]}
+    tags: [fiscal]
     destination: "Personal/Bank/{doc_year}"
 
   - id: screenshot-clutter
     status: shadow
-    learned_from: 2026-08-09
+    cycle: 1
     passes: 0
     hits: 0
+    agreed: 0
+    disagreed: 0
+    learned_from: "2026-08-14-1: 12 screenshots trashed from an inbox"
+    history: []
     when:
       all:
         - name_matches: '^(Capture d.écran|Screenshot)'
         - ext_in: [.png]
-    level: propose            # a name-only rule is capped here anyway
+    tags: []
+    destination: "Personal/Screenshots"
+    # name-only conditions = strength 1: even active, this rule is capped at
+    # propose — a filename is hearsay, not evidence.
