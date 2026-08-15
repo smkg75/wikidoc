@@ -56,15 +56,21 @@ identifiers:
   siren: {pattern: '\b\d{3}[ .]?\d{3}[ .]?\d{3}\b', validate: luhn}
   iban: {pattern: '\b[A-Z]{2}\d{2}[ ]?[\dA-Z][\dA-Z ]{10,30}\b', validate: iban}
   vat: {pattern: '\bFR\d{2}\d{9}\b', validate: none}
+  tenant_ref: {pattern: '\b4471120\b', validate: none}
   # e.g. FR3111111222220000098765432 passes mod-97; 452000003 passes Luhn.
+  # tenant_ref: a known constant reference is its own best pattern. It is here
+  # because an entity `ids:` value matches ONLY what this block harvested — a
+  # value no pattern catches is dead, however right it looks.
 
 # Who a document can belong to. An entity is a person, a household, an
 # employer, a landlord, a company — whatever your documents are about. Most
 # people have one or two and no company at all; this whole block is optional.
 #
-# An entity is recognised either by an `ids:` value found in the text, or by a
-# `match:` condition (same vocabulary as a rule's `when:`). Give it a
-# `bucket:` only if you want `{entity}` usable in a destination.
+# An entity is recognised either by an `ids:` value — compared against the
+# identifiers harvested by the block above, so each value needs a pattern
+# there that catches it — or by a `match:` condition (same vocabulary as a
+# rule's `when:`). Give it a `bucket:` only if you want `{entity}` usable in
+# a destination.
 #
 # Documents name several entities at once, so the STRONGEST evidence wins:
 #   3  an `ids:` value read in the content        (company number, account ref)
@@ -200,7 +206,10 @@ rules:
     history: []
     when:
       all:
-        - name_matches: '^(Capture d.écran|Screenshot)'
+        # regex conditions (name_matches, text_matches) run against norm()'d
+        # text — casefolded, accents stripped — so write them accent-less and
+        # lowercase; the dot covers straight and typographic apostrophes
+        - name_matches: '^(capture d.ecran|screenshot)'
         - ext_in: [.png]
     tags: []
     destination: "Personal/Screenshots"

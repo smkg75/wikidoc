@@ -133,10 +133,12 @@ exists, every pointer resolves, and the user approved the diff.
 
 ## 7. FIRST SWEEP
 
-A real first pass, scoped to Desktop + Downloads. Full machinery, nothing
-weakened: Collect limited to the two zones, Vision on every unread scan, Route,
-Decide with the user answering blocking questions as they arise, the Apply
-dry-run read together, then `--execute`. Target: about 80% of both zones
+A real first pass, scoped to Desktop + Downloads by the selection order itself:
+both zones are inboxes, and inbox files select ahead of the rest — so run
+`collect.py N` with N = the two zones' file count from SURVEY. Full machinery,
+nothing weakened: Vision on every unread scan, Route, Decide with the user
+answering blocking questions as they arise, the Apply dry-run read together,
+then `--execute`. Target: about 80% of both zones
 visibly emptied — the user should watch their Desktop change.
 
 End on a **bilan**: what moved where (counts plus a few sample paths), and the

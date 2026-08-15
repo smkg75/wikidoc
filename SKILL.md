@@ -32,9 +32,9 @@ One entry per selected file; each actor writes only its columns; empty columns a
 
 ## ① Collect
 
-`collect.py` selects the pass — `memory.jsonl` is the seen-set. A file is a candidate when it has no memory line, its (size, mtime) changed with new content, or its last decision was `unanswered`. Order: unanswered first, then `inboxes:` files, then the rest; take `batch_size` (default 500). Extraction is page 1 only, ~4000 chars; no text and size > 1 KiB → `needs_vision` plus a page-1 PNG in `bench/renders/`. Byte-identical duplicates are grouped with no size threshold.
+`collect.py` selects the pass — `memory.jsonl` is the seen-set. A file is a candidate when it has no memory line, its (size, mtime) changed with new content, or its last decision was `unanswered`. Order: unanswered first, then `inboxes:` files, then the rest; take `batch_size` (default 500). Extraction is page 1 only, ~4000 chars; no text and size > 1 KiB → `needs_vision`, with a page-1 PNG in `bench/renders/` for PDFs and images — other formats reach ② renderless and climb its ladder. Byte-identical duplicates are grouped with no size threshold.
 
-Done when the counts in `bench/logs/collect.log` are numbers you can explain from the corpus, and every `needs_vision` entry has a render.
+Done when the counts in `bench/logs/collect.log` are numbers you can explain from the corpus, and every `needs_vision` PDF and image has a render.
 
 ## ② Vision
 
