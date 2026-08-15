@@ -298,9 +298,15 @@ def cmd_route(cfg):
     # back FIRST next pass. Or a real decision already on the entry: the user
     # answered about a withdrawn file, and a human judgement is the strongest
     # evidence there is — that entry is triaged `propose` below, not blocked.
+    # A `known_as` entry is exempt: its md5 is already in memory, so the FIRST
+    # guard triages it `skip` on identity alone and never looks at the text.
+    # The barrier forbids judgement on unread bytes; recognising bytes already
+    # read in an earlier pass is not a judgement on them. Binning such a file
+    # still requires reading it — apply's probe refuses a trash with no
+    # readable text unless `reviewed: "vision"`, and always for a sensitive.
     blocked = [e["path"] for e in entries
                if e.get("needs_vision") and not (e.get("text") or "").strip()
-               and not e.get("decision")]
+               and not e.get("decision") and not e.get("known_as")]
     if blocked:
         print("vision barrier — no judgement on unread bytes; still unread:",
               file=sys.stderr)

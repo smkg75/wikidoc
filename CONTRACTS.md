@@ -242,7 +242,12 @@ an agent; no script ever interprets content.
 
 **Default verb** — fills the triage columns of every entry:
 - **Vision barrier**: exit 2, listing the paths, if any entry still has
-  `needs_vision: true`, empty `text` and no decision. No judgement on unread
+  `needs_vision: true`, empty `text` and no decision. A `known_as` entry is
+  EXEMPT: its md5 is already in memory, the first guard triages it `skip` on
+  identity and never consults the text, so re-reading it teaches nothing.
+  Recognising bytes read in an earlier pass is not a judgement on them — and
+  the safety net is unchanged, since apply refuses a trash with no readable
+  text (`reviewed: "vision"`) and always refuses a sensitive one. No judgement on unread
   bytes — but an entry already carrying a decision passes: a withdrawal
   (`unanswered`) is counted `withdrawn` and left untriaged, and a real user
   decision on an unread file is triaged `propose` (the human judged; that is
@@ -526,7 +531,17 @@ until someone picks them up.
    stratify by top-level folder, or take a seeded random sample (seed passed
    in, never generated — scripts stay deterministic).
 
-7. **Inbox guard vs promoted rules — a watch-point, not a bug.** The inbox
+7. **A rename orphans the symlinks that point at the file.** A corpus may
+   file deliberately in links (an archived mail-out pointing at the canonical
+   originals). Renaming an original leaves those links dangling: apply reports
+   the broken link on the NEXT pass (`FAIL … dangling symlink`) but never
+   repairs it, and the pass that caused it says nothing. Observed in
+   production the first time a rename hit a linked file. Direction: before a
+   `move`/`rename`, scan for links resolving to the source and re-point them
+   in the same gesture — or at minimum name them in the dry-run so the
+   operator sees what the rename is about to break.
+
+8. **Inbox guard vs promoted rules — a watch-point, not a bug.** The inbox
    guard preempts rules by design (nothing routes silently out of an inbox),
    which means even a promoted `active` rule never fires on inbox files: they
    are proposed forever. That is the contract as decided; watch whether the
