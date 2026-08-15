@@ -32,8 +32,8 @@ import extract  # noqa: E402
 # the condition engine lives in extract.py: apply.py's trash probe runs the
 # SAME matcher, so there is exactly one notion of what a condition means
 from extract import COND, matches, sensitive_hit, _id_values, _squeeze  # noqa: E402
-from memory import (Memory, is_inside, nfc, norm, pass_id, require_config,  # noqa: E402
-                    self_ingestion_guard, write_json_atomic)
+from memory import (Memory, is_inside, nfc, norm, pass_id, rel_key,  # noqa: E402
+                    require_config, self_ingestion_guard, write_json_atomic)
 
 TRIAGE = ("route", "propose", "residual", "skip")
 WEAK = {"name_matches", "path_under", "ext", "ext_in", "size_gt", "size_lt"}
@@ -200,8 +200,7 @@ def shadow_predictions(e, cfg):
 # ----------------------------------------------------------- default verb ----
 def route_entry(e, cfg):
     """One file in, its triage columns out — with the reason on every branch."""
-    e["_rel"] = (os.path.relpath(e["path"], cfg["root"])
-                 if is_inside(e["path"], cfg["root"]) else e["path"])
+    e["_rel"] = rel_key(e["path"], cfg["root"])
     entity, rivals = entity_for(e, cfg)
     if entity:
         e["_entity"] = entity.get("bucket") or entity.get("name")
@@ -218,8 +217,12 @@ def route_entry(e, cfg):
         checks.append(("sensitive", "propose", f"sensitive ({hit})"))
     if e.get("duplicate_of"):
         d = e["duplicate_of"]
-        checks.append(("duplicate", "propose", "byte-identical to "
-                       + (d[0] if isinstance(d, list) and d else str(d))))
+        twin = d[0] if isinstance(d, list) and d else str(d)
+        # the twin may be in the bin an hour from now, and this sentence is
+        # about to become a memory line: name the content too, since the md5
+        # keeps resolving (`memory.py show <md5>`) after the path stops
+        checks.append(("duplicate", "propose", f"byte-identical to {twin}"
+                       + (f" (md5 {e['md5']})" if e.get("md5") else "")))
     ib = inbox_of(e, cfg)
     if ib:
         checks.append(("inbox", "propose",
@@ -270,9 +273,8 @@ def load_routing(bench):
 
 
 def rel_to_root(p, cfg):
-    if os.path.isabs(p) and is_inside(p, cfg["root"]):
-        return os.path.relpath(p, cfg["root"])
-    return p
+    """The memory key for a path — the same one collect and apply write."""
+    return rel_key(p, cfg["root"])
 
 
 def rel_dest(dest, cfg):
@@ -629,8 +631,16 @@ def check_anchors(cfg):
         try:
             with open(ap, encoding="utf-8") as f:
                 body = f.read()
-        except OSError:
+        except FileNotFoundError:
             warnings.append(f"{anchor}: the anchor file itself does not resolve")
+            continue
+        except OSError as err:
+            # "does not resolve" reads as "was deleted", and a deleted anchor
+            # is a very plausible wrong conclusion when the truth is that the
+            # OS refused this process — say which one it is.
+            warnings.append(f"{anchor}: the anchor file cannot be read "
+                            f"({err.strerror or err}) — it exists, this process"
+                            " is not allowed to open it")
             continue
         for tok in re.findall(r"`([^`\n]+)`", body):
             if not (tok.startswith(("~", "/")) or os.sep in tok):
@@ -755,7 +765,8 @@ def audit_entry(rp, rec, cfg):
     stands in for the text: the bytes left the bench long ago, the reading the
     pass kept of them is the evidence that remains."""
     y = str(rec.get("date_doc") or "")[:4]
-    return {"path": rp if os.path.isabs(rp) else os.path.join(cfg["root"], rp),
+    ap = os.path.expanduser(rp)                # `~/…` keys: inbox files
+    return {"path": ap if os.path.isabs(ap) else os.path.join(cfg["root"], ap),
             "_rel": rp, "ext": os.path.splitext(rp)[1].lower(),
             "size": rec.get("size") or 0, "text": rec.get("desc") or "",
             "ids": rec.get("ids") or {},

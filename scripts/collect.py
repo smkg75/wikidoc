@@ -6,7 +6,10 @@ a candidate when memory has no line for its path, when its (size, mtime)
 changed and the content really is new (same md5 = a touch or a copy back, not
 new work), or when its last decision is `unanswered`. Unanswered files come
 back FIRST, then whatever sits in the inboxes, then the rest — in sorted walk
-order, so two runs over the same disk pick the same batch.
+order, so two runs over the same disk pick the same batch. The walk starts at
+`root` and at every inbox outside it (Desktop, Downloads), which is the only
+way those ever get scanned; a scan of zero files against a non-empty memory
+ends the pass with an error, never a green report.
 
 Evidence, per file: page-1 text truncated at ~4000 chars (`truncated` flag),
 page count, validated identifiers and dates, byte-identical duplicates by
@@ -35,8 +38,9 @@ import sys
 from fnmatch import fnmatch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from memory import (Memory, file_md5, flatten, is_inside, nfc,  # noqa: E402
-                    require_config, self_ingestion_guard, write_json_atomic)
+from memory import (Memory, file_md5, flatten, inbox_dirs,  # noqa: E402
+                    is_inside, nfc, pass_roots, require_config,
+                    self_ingestion_guard, write_json_atomic)
 import extract  # noqa: E402
 
 TEXT_CAP = 4000
@@ -54,19 +58,6 @@ def excluded(rel, patterns):
                for p in patterns)
 
 
-def inbox_dirs(cfg):
-    """[(configured path, absolute path)] — the first is the reporting key."""
-    out = []
-    for i in cfg.get("inboxes", []):
-        raw = i.get("path", "") if isinstance(i, dict) else i
-        p = os.path.expanduser(raw)
-        if p and not os.path.isabs(p):
-            p = os.path.join(cfg["root"], p)
-        if p:
-            out.append((raw, p))
-    return out
-
-
 def hashed(path, size, md5s):
     """One md5 per path per pass — selection, dedup and the entry share it."""
     if path not in md5s:
@@ -81,56 +72,77 @@ def walk_select(cfg, mem, limit, md5s):
     whole disk, not just the batch. Only stat-drifted files are hashed here —
     that is what keeps a pass over tens of thousands of files cheap.
 
-    What the walk cannot take (dangling symlinks, unstatable files) comes
-    back named in `ignored`: an inbox with `policy: empty` can never empty
-    itself of a dead symlink, and a skip nobody can see is a file that
-    silently never gets sorted.
+    What the walk cannot take comes back named in `ignored` — dangling
+    symlinks, unstatable files, AND directories it was refused (`onerror`).
+    A skip nobody can see is a file that silently never gets sorted, and a
+    refused directory nobody sees is an empty report that reads like a clean
+    one: os.walk swallows every scandir error by default, so a root gone
+    missing or locked by the OS looks exactly like a corpus already tidy.
     """
-    root, guards = cfg["root"], self_ingestion_guard(cfg)
+    guards = self_ingestion_guard(cfg)
     excl = cfg.get("exclude", [])
     inboxes = inbox_dirs(cfg)
     sizes, cands, ignored = {}, [], []
-    counts = {"scanned": 0, "seen": 0}
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        if any(is_inside(dirpath, g) for g in guards):
-            dirnames[:] = []
+    counts = {"scanned": 0, "seen": 0, "unreadable_dirs": 0}
+
+    def refused(err):
+        counts["unreadable_dirs"] += 1
+        ignored.append((nfc(getattr(err, "filename", "") or "?"),
+                        f"unreadable directory ({err.strerror or err})"))
+
+    bad_roots = []
+    for wroot in pass_roots(cfg):
+        # a root that cannot be opened is asked about, never inferred: a typo
+        # in `root:`, an unmounted volume and a permission the OS withdrew all
+        # end the walk before its first iteration, and os.walk reports none of
+        # the three. Checked here so the answer is "this root", not "0 files".
+        if not os.path.isdir(wroot) or not os.access(wroot, os.R_OK | os.X_OK):
+            bad_roots.append(nfc(wroot))
+            ignored.append((nfc(wroot), "walk root unreadable — missing, "
+                                        "unmounted, or refused by the OS"))
             continue
-        rel_dir = os.path.relpath(dirpath, root)
-        dirnames[:] = sorted(d for d in dirnames
-                             if not excluded(os.path.join(rel_dir, d), excl))
-        for fn in sorted(filenames):
-            if fn == ".DS_Store":
+        for dirpath, dirnames, filenames in os.walk(wroot, followlinks=False,
+                                                    onerror=refused):
+            if any(is_inside(dirpath, g) for g in guards):
+                dirnames[:] = []
                 continue
-            p = os.path.join(dirpath, fn)
-            rel = nfc(os.path.relpath(p, root))
-            if excluded(rel, excl):
-                continue
-            try:
-                st = os.stat(p)
-            except OSError:
-                ignored.append((nfc(p), "dangling symlink"
-                                if os.path.islink(p) else "unstatable"))
-                continue
-            size, mtime = st.st_size, int(st.st_mtime)
-            counts["scanned"] += 1
-            sizes.setdefault(size, []).append(p)
-            inbox = next((disp for disp, ap in inboxes if is_inside(p, ap)),
-                         None)
-            rec = mem.by_path.get(rel)
-            if rec is not None and rec.get("decision") == "unanswered":
-                cands.append((0, p, size, mtime, inbox))  # re-selected first
-                continue
-            if rec is not None and (rec.get("size"), rec.get("mtime")) == (size, mtime):
-                counts["seen"] += 1
-                continue
-            if rec is not None:
-                # stat drifted: re-check the content before calling it new —
-                # same md5 is a touch, not new work
-                if hashed(p, size, md5s) == rec.get("md5"):
+            rel_dir = os.path.relpath(dirpath, wroot)
+            dirnames[:] = sorted(d for d in dirnames
+                                 if not excluded(os.path.join(rel_dir, d), excl))
+            for fn in sorted(filenames):
+                if fn == ".DS_Store":
+                    continue
+                p = os.path.join(dirpath, fn)
+                if excluded(nfc(os.path.relpath(p, wroot)), excl):
+                    continue
+                key = mem.rel(p)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    ignored.append((nfc(p), "dangling symlink"
+                                    if os.path.islink(p) else "unstatable"))
+                    continue
+                size, mtime = st.st_size, int(st.st_mtime)
+                counts["scanned"] += 1
+                sizes.setdefault(size, []).append(p)
+                inbox = next((disp for disp, ap in inboxes if is_inside(p, ap)),
+                             None)
+                rec = mem.by_path.get(key)
+                if rec is not None and rec.get("decision") == "unanswered":
+                    cands.append((0, p, size, mtime, inbox))  # re-selected first
+                    continue
+                if rec is not None and (rec.get("size"), rec.get("mtime")) == (size, mtime):
                     counts["seen"] += 1
                     continue
-            cands.append((1 if inbox else 2, p, size, mtime, inbox))
+                if rec is not None:
+                    # stat drifted: re-check the content before calling it new —
+                    # same md5 is a touch, not new work
+                    if hashed(p, size, md5s) == rec.get("md5"):
+                        counts["seen"] += 1
+                        continue
+                cands.append((1 if inbox else 2, p, size, mtime, inbox))
     cands.sort(key=lambda c: c[0])      # stable: walk order within each band
+    counts["unreadable_roots"] = bad_roots
     counts["candidates"] = len(cands)
     picked = cands[:limit]
     # per-inbox accounting: a sweep sized on one inbox starves the others,
@@ -280,7 +292,6 @@ def main():
                   duplicates=0, known_content=0, errors=0)
 
     entries, lines = [], []
-    root = cfg["root"]
     for idx, (_, p, size, mtime, _ib) in enumerate(picked, 1):
         e = prep_entry(cfg, p, size, mtime, ws, render_dir, idx, md5s)
 
@@ -303,7 +314,7 @@ def main():
             prev = mem.seen_md5(e["md5"])
             if isinstance(prev, list):
                 prev = prev[-1] if prev else None
-            if prev and prev.get("path") != nfc(os.path.relpath(p, root)) \
+            if prev and prev.get("path") != mem.rel(p) \
                     and os.path.exists(mem.abs(prev.get("path", ""))):
                 e["known_as"] = prev.get("path")
                 if prev.get("desc"):
@@ -339,6 +350,22 @@ def main():
     for line in skips:
         print(line)
     print(f"evidence -> {os.path.join(bench, 'routing.json')}", file=sys.stderr)
+
+    # "I could not look" and "there was nothing" are not the same answer, and
+    # only one of them may end a pass quietly. A root nobody could open, or a
+    # memory holding thousands of files under roots that now scan to zero, is
+    # a broken setup — never a tidy corpus. Refuse the pass out loud; the next
+    # steps have nothing to chew on anyway.
+    if counts["unreadable_roots"]:
+        sys.exit("\nunreadable walk root: %s — nothing was collected there. "
+                 "Fix the path or the permission before re-running; a refused "
+                 "root is not an empty one."
+                 % ", ".join(counts["unreadable_roots"]))
+    if counts["scanned"] == 0 and mem.lines:
+        sys.exit(f"\nscanned 0 files under {', '.join(pass_roots(cfg))} while "
+                 f"memory holds {mem.lines} lines — this is not an empty "
+                 "corpus. Nothing was collected; check the roots before "
+                 "re-running.")
 
 
 if __name__ == "__main__":

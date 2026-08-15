@@ -11,6 +11,8 @@ normaliser, one hash, one containment check, defined once.
 what the tool knows about every document and why. **by_path is the primary
 index** — the last line for a given path wins. by_md5 is secondary: one md5 may
 map to a LIST of records (byte-identical duplicates live at several paths).
+Keys are root-relative, or `~/…` for a file an outside inbox brought in
+(`rel_key` — one key function, so collect, route and apply agree).
 
 v1 records carried a `level` field; v2 calls it `triage`. Readers accept both,
 writers emit only `triage`.
@@ -100,6 +102,55 @@ def self_ingestion_guard(config):
     can forget the exclusion line and have the tool eat its own memory.
     """
     return [config["workspace"], skill_dir()]
+
+
+def inbox_dirs(cfg):
+    """[(configured path, absolute path)] — the first is the reporting key."""
+    out = []
+    for i in cfg.get("inboxes", []):
+        raw = i.get("path", "") if isinstance(i, dict) else i
+        p = os.path.expanduser(raw)
+        if p and not os.path.isabs(p):
+            p = os.path.join(cfg["root"], p)
+        if p:
+            out.append((raw, p))
+    return out
+
+
+def pass_roots(cfg):
+    """Every directory a pass walks: `root`, then each inbox outside it.
+
+    An inbox is where files ARRIVE, and on every machine Desktop and Downloads
+    arrive OUTSIDE the document tree. A walk rooted only at `root` never sees
+    them — and reports `candidates: 0`, which reads as "inbox clean" instead
+    of "never looked". So an outside inbox is a walk root in its own right,
+    not merely a priority band. Nested inboxes are folded into the root that
+    already covers them, so no file is scanned twice.
+    """
+    roots = [cfg["root"]]
+    for _disp, ap in inbox_dirs(cfg):
+        if not any(is_inside(ap, r) for r in roots):
+            roots.append(ap)
+    return roots
+
+
+def rel_key(path, root):
+    """THE memory key for a file: relative to root, `~/…` when outside it.
+
+    Files reached through an inbox that sits outside `root` still need a key,
+    and it must be readable, stable across machines, and comparable. A `../`
+    climb is none of those — `../Desktop/x.pdf` breaks the moment root moves
+    and reads like a bug. Home-relative with a literal `~` does not.
+    """
+    if not os.path.isabs(path):
+        return nfc(path)             # already a key (apply.py's finals)
+    real = os.path.realpath(path)
+    if root and is_inside(real, root):
+        return nfc(os.path.relpath(real, os.path.realpath(root)))
+    home = os.path.realpath(os.path.expanduser("~"))
+    if is_inside(real, home):
+        return nfc(os.path.join("~", os.path.relpath(real, home)))
+    return nfc(real)
 
 
 # ---------------------------------------------------------------- config ----
@@ -220,14 +271,10 @@ class Memory:
 
     def rel(self, path):
         """Path recorded relative to root — the memory survives a root move."""
-        if not os.path.isabs(path):
-            return nfc(path)          # already root-relative (apply.py's finals)
-        if self.root and is_inside(path, self.root):
-            return nfc(os.path.relpath(os.path.realpath(path),
-                                       os.path.realpath(self.root)))
-        return nfc(os.path.abspath(path))
+        return rel_key(path, self.root)
 
     def abs(self, relpath):
+        relpath = os.path.expanduser(relpath)      # `~/Desktop/x.pdf` keys
         if os.path.isabs(relpath):
             return relpath
         return os.path.join(self.root or self.ws, relpath)

@@ -15,6 +15,10 @@ on every invocation and nothing in `config.yaml` can turn one off.
                                 and stamps `result` — a crash leaves both at
                                 the interruption point, `--resume` continues
 
+A guard that refuses a gesture is reported as `refused`, never as `failed`:
+one is the tool working, the other is the tool broken, and a condition of
+"failed is 0" that lumps them together is an invitation to disable the guard.
+
 Decisions: move | rename | trash | tag | none. `unanswered` and empty are not
 actions — route.py --learn records them. Anything else fails the entry before
 any gesture, as does a path outside root.
@@ -29,7 +33,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract  # noqa: E402
 from memory import (Memory, file_md5, is_inside, nfc, pass_id,  # noqa: E402
-                    require_config, self_ingestion_guard, write_json_atomic)
+                    pass_roots, require_config, self_ingestion_guard,
+                    write_json_atomic)
 
 MINIMAL = os.environ.get("WIKIDOC_MINIMAL") == "1"
 DECISIONS = ("move", "rename", "trash", "tag", "none")
@@ -152,7 +157,7 @@ def reconcile(e, decision, raw, cfg, mem, pass_name):
         st = stat_or_none(p) if p else None
         if st and st.st_size == e.get("size") \
                 and file_md5(p, st.st_size) == md5:
-            final = nfc(os.path.relpath(p, root))
+            final = mem.rel(p)
             kw = {"pass_id": pass_name,
                   "triage": e.get("triage") or e.get("level") or "propose",
                   "decision": decision, "reason": e.get("why") or "",
@@ -223,8 +228,9 @@ def main():
     with open(marker, "w", encoding="utf-8") as f:
         f.write(pass_name)
     guards = self_ingestion_guard(cfg)
+    sources = pass_roots(cfg)      # root, plus the inboxes that live outside it
 
-    done, failed = [], []
+    done, failed, refused = [], [], []
     skipped = {"done": 0, "undecided": 0}
     memory_lines = 0
 
@@ -251,8 +257,10 @@ def main():
         # -- validation before any gesture -----------------------------------
         if decision not in DECISIONS:
             failed.append((raw, f"unknown decision {decision!r}")); continue
-        if not raw or not is_inside(raw, root):
-            failed.append((raw, "path outside root")); continue
+        # a file may COME from an inbox outside root; it may only ever GO
+        # inside it — that is what filing means
+        if not raw or not any(is_inside(raw, s) for s in sources):
+            failed.append((raw, "path outside root and every inbox")); continue
         if any(is_inside(raw, g) for g in guards):
             failed.append((raw, "inside the workspace — the tool does not "
                                 "ingest itself")); continue
@@ -282,7 +290,7 @@ def main():
             failed.append((raw, "stat failed")); continue
 
         ext = os.path.splitext(src)[1].lower()
-        rel_src = nfc(os.path.relpath(src, root))
+        rel_src = mem.rel(src)
         # no triage but a decision = the answered-withdrawal path: a human
         # judgement counts as `propose` (route.py stamps the same)
         base = {"pass_id": pass_name,
@@ -304,7 +312,7 @@ def main():
             dst, why = free_destination(src, dst_abs)
             if not dst:
                 failed.append((raw, why)); continue
-            final = nfc(os.path.relpath(dst, root))
+            final = mem.rel(dst)
             try:                                # desc judged before the gesture
                 rec = mem.record(**{**base, "path": final,
                                     "md5": file_md5(src, st.st_size),
@@ -330,26 +338,26 @@ def main():
             # Nothing is binned until the config says what is protected: a
             # fresh install cannot lose a passport to a setting not yet written.
             if not cfg.get("sensitive"):
-                failed.append((raw, "config declares no `sensitive:` — "
-                                    "nothing is binned until it does")); continue
+                refused.append((raw, "config declares no `sensitive:` — "
+                                     "nothing is binned until it does")); continue
             text = own_text(src, ext)
             # Debris is not a reading: a binary .doc hands the text fallback
             # replacement-char soup — non-empty, so the old emptiness test
             # believed it had read the file. Language or nothing.
             readable = bool(text) and extract.looks_like_prose(text)
             if not readable and st.st_size > 1024 and e.get("reviewed") != "vision":
-                failed.append((raw, "no readable text re-extracted from a "
-                                    "non-trivial file (empty or extractor "
-                                    "debris) — kept until reviewed with vision")); continue
+                refused.append((raw, "no readable text re-extracted from a "
+                                     "non-trivial file (empty or extractor "
+                                     "debris) — kept until reviewed with vision")); continue
             try:
                 ids = extract.extract_ids(text or "", cfg) or {}
             except Exception:
-                failed.append((raw, "id re-extraction failed — kept")); continue
+                refused.append((raw, "id re-extraction failed — kept")); continue
             hit = extract.sensitive_hit({"path": src, "_rel": rel_src,
                                          "text": text or "", "ext": ext,
                                          "ids": ids, "size": st.st_size}, cfg)
             if hit:
-                failed.append((raw, f"sensitive ({hit}) — kept")); continue
+                refused.append((raw, f"sensitive ({hit}) — kept")); continue
             try:
                 rec = mem.record(**{**base, "path": rel_src,
                                     "md5": file_md5(src, st.st_size),
@@ -392,11 +400,16 @@ def main():
         kinds[kind] = kinds.get(kind, 0) + 1
     print(json.dumps({"mode": "execute" if execute else "dry-run",
                       "pass": pass_name, "applied": kinds,
-                      "failed": len(failed), "skipped": skipped,
-                      "memory_lines": memory_lines},
+                      "failed": len(failed), "refused": len(refused),
+                      "skipped": skipped, "memory_lines": memory_lines},
                      ensure_ascii=False, indent=1))
     for kind, a, b in done:
         print(f"  {kind:6} {nfc(a)}" + (f"  ->  {nfc(str(b))}" if b else ""))
+    # A guard doing its job is not a failure. Counting the two together taught
+    # the reader that a green pass means zero refusals, and the only way to get
+    # there is to work around the guard — exactly the wrong lesson.
+    for a, why in refused:
+        print(f"  REFUSE {nfc(a)}  <- {why}")
     for a, why in failed:
         print(f"  FAIL   {nfc(a)}  <- {why}")
     if not execute:
