@@ -53,17 +53,22 @@ what the tool knows about every document and why.
  "date_doc": "YYYY-MM-DD"|null, "provenance": "pass"|"migrated"}
 ```
 
-`path` is NFC, relative to root. **by_path is the primary index**
-(last-write-wins per path); by_md5 secondary, one md5 may map to a LIST.
-`stats` reports `distinct_files = len(by_path)`.
+`path` is NFC and root-relative, or `~/…` for a file an inbox outside root
+brought in — never a `../` climb, which breaks the moment root moves.
+**by_path is the primary index** (last-write-wins per path); by_md5
+secondary, one md5 may map to a LIST. `stats` reports
+`distinct_files = len(by_path)`.
 
 Shared helpers, owned here, imported by everyone — names are LAW:
 `nfc(s)`, `norm(s)` (THE one text normaliser: NFC → casefold → strip
 combining marks → collapse whitespace; every text comparison in the codebase
 goes through it), `flatten(s)`, `file_md5(path, size)` (None on unreadable),
-`is_inside(path, root)`, `workspace()`, `skill_dir()`,
-`self_ingestion_guard(cfg)`, `load_config()`, `require_config()`,
-`pass_id(mem)`.
+`is_inside(path, root)`, `rel_key(path, root)` (THE memory key — collect,
+route and apply must agree or a file is filed twice), `inbox_dirs(cfg)`,
+`pass_roots(cfg)` (root + every inbox outside it: the directories a pass
+walks, and the directories apply accepts a source from), `workspace()`,
+`skill_dir()`, `self_ingestion_guard(cfg)`, `load_config()`,
+`require_config()`, `pass_id(mem)`.
 
 API: `class Memory: by_path, by_md5, seen_stat(path, size, mtime),
 seen_md5(md5), record(**fields) -> dict, append(rec)` (writes ONE line
@@ -170,7 +175,13 @@ trash" is structurally impossible.
 ### collect.py — step ①: choose the pass's files, read their evidence
 
 Selection (no cursor, no xattr — memory.jsonl IS the seen-set):
-walk root (config excludes), a file is a **candidate** when it has no memory
+walk `pass_roots(cfg)` — root, plus every inbox outside it, each a walk root
+of its own (an inbox is where files ARRIVE, and Desktop/Downloads arrive
+outside the tree; treating `inboxes:` as a priority band only is how v2
+shipped with two inboxes that reported `candidates: 0` forever). Nested
+inboxes fold into the root that covers them: no file is scanned twice.
+Config excludes are matched relative to the walk root that found the file.
+A file is a **candidate** when it has no memory
 line, OR its (size, mtime) changed (md5 re-checked: same content = moved,
 recorded as `known_as`; new content = candidate), OR its last decision is
 `unanswered`. Order: unanswered first, then files under `inboxes:` paths,
@@ -198,6 +209,17 @@ and listed by name (`IGNORED <path> <- <reason>`) on stdout AND in
 collect.log — an invisible skip is a file that never gets sorted. Counts
 also break down candidates/selected/remaining PER configured inbox, so a
 sweep sized on one inbox cannot starve another in silence.
+
+**A refused look is never reported as an empty corpus.** `os.walk` swallows
+every scandir error by default; a mistyped `root:`, an unmounted volume and
+a permission the OS withdrew all produced `scanned: 0, errors: 0` and exit 0
+— five green reports for zero work, which is the worst failure mode a
+filing tool has. So: `onerror` counts every refused directory into
+`unreadable_dirs` and names it in `ignored`; each walk root is probed before
+it is walked and, if it cannot be opened, listed in `unreadable_roots`; and
+the pass **exits non-zero** when any walk root is unreadable, or when
+`scanned == 0` while `memory.jsonl` is not empty. An empty corpus with an
+empty memory still exits 0 — that one really is nothing to do.
 
 `collect.py --render <path> --pages A-B` — on-demand renders for agents whose
 harness cannot read the original directly. The escalation READER is always
@@ -318,8 +340,16 @@ The four v2 fixes:
    the file via extract.py. A trash entry whose re-extracted text is empty
    and size > 1024 is REFUSED unless `reviewed: "vision"` — an agent
    asserting it read the render this pass.
-4. Entry validation up front: a decision on a path outside root, or an
-   unknown decision value, fails the entry before any gesture.
+4. Entry validation up front: an unknown decision value, or a source outside
+   `pass_roots(cfg)` (root and the inboxes — a file may COME from an inbox
+   outside root, it may only ever GO inside root), fails the entry before
+   any gesture.
+
+**`refused` is not `failed`.** A guard declining a gesture — sensitive hit,
+unreadable text on a trash, no `sensitive:` block — is counted `refused` and
+printed `REFUSE`; only a broken entry is `failed` and only `failed` sets the
+exit code. They were one counter until SKILL.md's "done when `failed` is 0"
+started teaching agents that a working guard is a problem to route around.
 
 ## config.example.yaml
 

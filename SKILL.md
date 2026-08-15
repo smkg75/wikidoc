@@ -32,7 +32,9 @@ One entry per selected file; each actor writes only its columns; empty columns a
 
 ## ① Collect
 
-`collect.py` selects the pass — `memory.jsonl` is the seen-set. A file is a candidate when it has no memory line, its (size, mtime) changed with new content, or its last decision was `unanswered`. Order: unanswered first, then `inboxes:` files, then the rest; take `batch_size` (default 500). Extraction is page 1 only, ~4000 chars; no text and size > 1 KiB → `needs_vision`, with a page-1 PNG in `bench/renders/` for PDFs and images — other formats reach ② renderless and climb its ladder. Byte-identical duplicates are grouped with no size threshold.
+`collect.py` selects the pass — `memory.jsonl` is the seen-set. A file is a candidate when it has no memory line, its (size, mtime) changed with new content, or its last decision was `unanswered`. Order: unanswered first, then `inboxes:` files, then the rest; take `batch_size` (default 500).
+
+The walk starts at `root` **and at every inbox that lives outside it** — Desktop and Downloads are outside the document tree on most machines, and an inbox is a walk root, not merely a priority band. Their files are keyed `~/Desktop/…` in memory; everything under `root` stays root-relative. What could not be walked is named — a refused directory is reported `IGNORED`, and an unreadable walk root, or a scan of zero files against a non-empty memory, ends the pass with an error. "I could not look" is never reported as "there was nothing". Extraction is page 1 only, ~4000 chars; no text and size > 1 KiB → `needs_vision`, with a page-1 PNG in `bench/renders/` for PDFs and images — other formats reach ② renderless and climb its ladder. Byte-identical duplicates are grouped with no size threshold.
 
 Done when the counts in `bench/logs/collect.log` are numbers you can explain from the corpus, and every `needs_vision` PDF and image has a render.
 
@@ -68,7 +70,7 @@ Done when every entry has a decision, or a reason it does not that you can say o
 
 `apply.py` is dry-run by default: it prints every gesture and touches nothing. `--execute` once the printout matches intent — and the execution report must equal the dry-run report. Each successful action appends its memory line immediately and stamps `result`; a crash leaves both exactly at the interruption point, and `apply.py --resume --execute` continues where `result` is missing (`--resume` alone prints the dry-run of the remainder — dry-run stays the default, always). Before replaying an entry whose source is gone, resume reconciles: a gesture the killed run already performed (memory line from this pass, or the file at its decided destination with matching size and md5) is stamped `result`, reported as `reconcile` — never a FAIL, never a ghost `unanswered`. Trash goes to the OS bin (fallback `<workspace>/.trash/<pass>/`), collisions get `(2)`, nothing is clobbered. The sensitive probe trusts nothing from the bench: text and ids are re-extracted from the file itself, and extractor debris does not count as a reading — a non-trivial file whose re-read yields no language is kept until `reviewed: "vision"`. No `sensitive:` block in config → every trash is refused.
 
-Done when dry-run and execution report the same counts and `failed` is 0.
+Done when dry-run and execution report the same counts and `failed` is 0. `refused` is a separate count and is not a defect: a guard that keeps a sensitive or unread file is the tool working. Never chase it to zero — read each refusal, and answer it with evidence (`reviewed: "vision"` after actually looking) or leave the file alone.
 
 ## ⑥ Learn
 

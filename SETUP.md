@@ -91,7 +91,9 @@ Then the inboxes, defaults on the table: **Downloads empty** (policy `empty` —
 everything files out), **Desktop transit** (policy `transit` — work in progress
 tolerated, residue proposed each pass), everything under Documents by entity.
 Store each answer in `inboxes:` — an inbox file is always proposed, never
-silently routed.
+silently routed. An inbox **outside** `root` (Desktop and Downloads normally
+are) is walked as a root of its own, and its files are keyed `~/Desktop/…` in
+memory; nothing has to sit under `root` to be swept.
 
 Done when the tree is in config `layout:` and every inbox has a policy the user
 chose.

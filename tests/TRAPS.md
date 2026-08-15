@@ -184,7 +184,9 @@ withdrawn entry is exempt, counted `withdrawn`, and gets no triage.
 the probe's text fallback yields replacement-char soup, which is non-empty
 but fails `looks_like_prose`, and debris is not a reading. v1 passed
 exactly this trash. With `reviewed: "vision"` (an agent asserting it looked
-this pass) the same entry goes through.
+this pass) the same entry goes through. The refusal is reported `REFUSE` and
+counted `refused`, never `failed`: a guard doing its job must not make the
+pass look broken, or the next agent will work around it.
 
 **Unanswered by name** — leave one selected file undecided through a full
 pass. Correct: `--learn` reports it BY NAME, writes its memory line with
@@ -198,7 +200,30 @@ rmtree'd, and the next pass starts on a fresh bench.
 backticked path that no longer resolves. Correct: `--learn` prints a
 warning naming the dead pointer; it never fails the pass, and it never
 silently ignores it — a dead pointer is a fact that left the instructions
-file and arrived nowhere.
+file and arrived nowhere. Then `chmod 000` the anchor file itself and re-run:
+the warning must say the file cannot be READ, not that it does not resolve —
+"does not resolve" on an existing file reads as "it was deleted", and that
+wrong conclusion was drawn on v2's first real pass.
+
+**Inbox outside root** — pinned v2 bug (first production pass): put the
+configured inbox OUTSIDE `root` (as Desktop and Downloads are on a real
+machine) with one file in it. Correct: collect walks it as a root of its own
+— the file is scanned, counted under its inbox, keyed `~/…` (never `../…`)
+in memory, triaged `propose` by the inbox guard, and apply accepts it as a
+source and files it INTO root. Wrong (the shipped bug): `scanned` ignores it
+and the inbox reports `candidates: 0, remaining: 0`, which reads "inbox
+clean" — a `policy: empty` promise that can never be checked. Counter-test:
+the same inbox under `root` must not be scanned twice.
+
+**A refused walk is not an empty corpus** — pinned v2 bug (first production
+pass): `chmod 000` the root (or point `root:` at a path that does not exist)
+with a non-empty `memory.jsonl`. Correct: collect exits non-zero, names the
+root under `unreadable_roots` and `IGNORED`, and collects nothing. Wrong (the
+shipped bug): `scanned: 0, errors: 0`, exit 0 — os.walk's default `onerror`
+swallows the PermissionError, and every later step reports zero just as
+cheerfully. Same for a sub-directory: `chmod 000` one folder under a readable
+root and it must appear in `unreadable_dirs` and `IGNORED`, not vanish.
+Counter-test: a genuinely empty corpus with an empty memory still exits 0.
 
 **Answered withdrawal closes the pass** — pinned v2 bug (cold test): withdraw
 a file in pass N, then in pass N+1 have the "user" answer — write a real

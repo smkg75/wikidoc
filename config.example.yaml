@@ -20,7 +20,8 @@ exclude:                        # glob patterns, matched against paths under roo
 
 # Folders where files ARRIVE, not where they live. Anything found here is
 # proposed, never routed silently — the whole point of an inbox is that a
-# human meant to deal with it.
+# human meant to deal with it. An inbox outside `root` (both of these are) is
+# walked as a root of its own; its files are keyed `~/Desktop/…` in memory.
 #   empty    the folder should end up empty; leftovers are residues to report
 #   transit  files may sit here between sessions; only stale ones are raised
 inboxes:
