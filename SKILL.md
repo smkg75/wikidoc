@@ -15,7 +15,7 @@ Scripts live in `scripts/`, next to this file. Resolve this file's directory onc
 - **Evidence** decides. Strength 3 = a validated identifier read in the content, 2 = a name read in the content, 1 = path or filename only — hearsay. A rule matching only strength-1 conditions is capped at `propose`.
 - Read a file before the gesture that touches it. The `propose` and `residual` triages exist for exactly that.
 - Removal goes to the OS bin — every gesture is reversible. A sensitive document is never routed automatically and never trashed unread: `apply.py` re-reads the file itself and refuses the entry. It can still be filed and renamed, which is the point of sorting it.
-- Duplicates are byte-identical or they are not duplicates. Same text, different bytes is a re-download: diff in full before keeping one.
+- Duplicates are byte-identical or they are not duplicates. Zero-byte files group with nothing — emptiness is not identity. Same text, different bytes is a re-download: diff in full before keeping one.
 - A move counts once it is re-stat'ed at its destination.
 
 ## The working file: `bench/routing.json`
@@ -42,6 +42,10 @@ An agent reads every `needs_vision` entry and fills `text` and `lu`: `"text"` (e
 
 A file that survives every reader is **withdrawn**, and withdrawal is torn from you, not chosen: set `decision: "unanswered"` with a `reason` that names each attempt — `"tried: render p1, Read p1-2, sips — all failed"`. A withdrawal whose reason lists no attempts is laziness with a paper trail; the file comes back first next pass either way, so skipping the ladder buys nothing. `lu` is NEVER set on a file that was not read — it is a witness, not a checkbox.
 
+**Answering a withdrawn file**: when the user says what an unreadable file is, write the real decision (`move`, `trash`, …) straight onto the entry — a human judgement is the strongest evidence there is, and it counts as triage `propose`. Re-run `route.py` and it stamps that triage instead of blocking; and even if `apply` already ran, `--learn` accepts a stamped `result` without a triage (reported under `answered_withdrawals`). Either order closes the pass.
+
+Containers (`.zip`, `.tar`, …) are never `needs_vision` — nothing renders them: collect marks them `opaque: "container"`, they reach ④ as residuals, and an agent that opens one to read its listing records `lu: "container"`.
+
 Done when every `needs_vision` entry has `text` filled, or a withdrawal whose `reason` lists the attempts.
 
 ## ③ Route
@@ -62,7 +66,7 @@ Done when every entry has a decision, or a reason it does not that you can say o
 
 ## ⑤ Apply
 
-`apply.py` is dry-run by default: it prints every gesture and touches nothing. `--execute` once the printout matches intent — and the execution report must equal the dry-run report. Each successful action appends its memory line immediately and stamps `result`; a crash leaves both exactly at the interruption point, and `apply.py --resume` continues where `result` is missing. Trash goes to the OS bin (fallback `<workspace>/.trash/<pass>/`), collisions get `(2)`, nothing is clobbered. The sensitive probe trusts nothing from the bench: text and ids are re-extracted from the file itself, and extractor debris does not count as a reading — a non-trivial file whose re-read yields no language is kept until `reviewed: "vision"`. No `sensitive:` block in config → every trash is refused.
+`apply.py` is dry-run by default: it prints every gesture and touches nothing. `--execute` once the printout matches intent — and the execution report must equal the dry-run report. Each successful action appends its memory line immediately and stamps `result`; a crash leaves both exactly at the interruption point, and `apply.py --resume --execute` continues where `result` is missing (`--resume` alone prints the dry-run of the remainder — dry-run stays the default, always). Before replaying an entry whose source is gone, resume reconciles: a gesture the killed run already performed (memory line from this pass, or the file at its decided destination with matching size and md5) is stamped `result`, reported as `reconcile` — never a FAIL, never a ghost `unanswered`. Trash goes to the OS bin (fallback `<workspace>/.trash/<pass>/`), collisions get `(2)`, nothing is clobbered. The sensitive probe trusts nothing from the bench: text and ids are re-extracted from the file itself, and extractor debris does not count as a reading — a non-trivial file whose re-read yields no language is kept until `reviewed: "vision"`. No `sensitive:` block in config → every trash is refused.
 
 Done when dry-run and execution report the same counts and `failed` is 0.
 

@@ -5,7 +5,7 @@ not in `SKILL.md`.
 
 The output: a `config.yaml` filled from evidence found in the user's own
 documents, instruction files that point at the wiki instead of duplicating it,
-and a first real pass already run over Desktop and Downloads. Work in
+and a first real pass already run over every configured inbox. Work in
 `$WIKIDOC_HOME` (default `~/.wikidoc`); create it if missing. Invoke scripts by
 absolute path from the skill directory, as `SKILL.md` says.
 
@@ -133,13 +133,20 @@ exists, every pointer resolves, and the user approved the diff.
 
 ## 7. FIRST SWEEP
 
-A real first pass, scoped to Desktop + Downloads by the selection order itself:
-both zones are inboxes, and inbox files select ahead of the rest — so run
-`collect.py N` with N = the two zones' file count from SURVEY. Full machinery,
+A real first pass, scoped to the inboxes by the selection order itself: inbox
+files select ahead of the rest — so run `collect.py N` with N = the SUM of the
+file counts of ALL the inboxes in `inboxes:`, not just Desktop + Downloads.
+GRILL routinely surfaces a third inbox, and a sweep sized on two of them
+starves the rest in silence; collect.py prints selected/remaining counts per
+inbox — check that no inbox was left behind before going on. Full machinery,
 nothing weakened: Vision on every unread scan, Route, Decide with the user
 answering blocking questions as they arise, the Apply dry-run read together,
-then `--execute`. Target: about 80% of both zones
-visibly emptied — the user should watch their Desktop change.
+then `--execute`.
+
+The honest target: an `empty`-policy inbox (Downloads) emptied or nearly so; a
+`transit` inbox (Desktop) reduced to its legitimate work in progress — a
+Desktop full of live WIP will not visibly empty, and promising that is a
+promise the pass cannot keep. Whatever remains is named, never waved at.
 
 End on a **bilan**: what moved where (counts plus a few sample paths), and the
 residues BY NAME — each one recorded `unanswered`, so the next pass selects it
@@ -148,5 +155,6 @@ first and opens with its question.
 Then tell the user, explicitly: continue in this same conversation, or start a
 fresh one — both work, `memory.jsonl` carries the state.
 
-Done when the pass is archived under `logs/`, both zones are visibly thinner,
-and every residue is named in the bilan and recorded `unanswered`.
+Done when the pass is archived under `logs/`, every inbox's remaining count is
+one you can explain, and every residue is named in the bilan and recorded
+`unanswered`.

@@ -115,8 +115,11 @@ config taxonomy.
 
 One entry per selected file. Each pipeline actor writes ONLY its columns;
 writes are atomic (temp file + rename). Empty columns = remaining work;
-`--resume` = "continue where `result` is missing". Dies with the pass
-(archived, not deleted).
+`--resume` = "continue where `result` is missing" — with `--execute` (a bare
+`--resume` prints the dry-run of the remainder; dry-run stays apply's
+default), and reconciling first: a gesture a killed run already performed is
+stamped, not replayed (see apply.py). Dies with the pass (archived, not
+deleted).
 
 | columns | writer | step |
 |---|---|---|
@@ -127,13 +130,22 @@ writes are atomic (temp file + rename). Empty columns = remaining work;
 | `result final` | apply.py | ⑤ |
 
 `lu`: `"text"` (extracted layer sufficed) · `"render"` (read from PNG) ·
-`"pages N-M"` (agent escalated and read the original's targeted pages).
+`"pages N-M"` (agent escalated and read the original's targeted pages) ·
+`"container"` (agent opened an archive and read its listing/members).
 `lu` is NEVER set on a file that was not read. A file that survives every
 reader — render, `Read` on the original, `collect.py --render`, conversion —
 is **withdrawn**: `decision: "unanswered"` with a `reason` naming each
 attempt (`"tried: render p1, Read p1-2, sips — all failed"`). The retry is
 real and mandatory before withdrawal; the file is re-selected FIRST next
 pass, so a lazy withdrawal buys nothing and shows in its own reason.
+
+**Answering a withdrawn file**: when the user says what an unreadable file
+is, the decide agent writes the real decision straight onto the unread
+entry. A human judgement counts as triage `propose` — the strongest evidence
+there is. route.py stamps that triage instead of blocking, apply records
+`propose` in the memory line when the triage column is empty, and `--learn`
+accepts a stamped `result` without a triage (reported under
+`answered_withdrawals`). Either verb order closes the pass; nothing wedges.
 
 Entry lifecycle (a 2-page scan, abridged):
 
@@ -165,13 +177,27 @@ recorded as `known_as`; new content = candidate), OR its last decision is
 then the rest. Take N (default `batch_size: 500`).
 
 Extraction: **page 1 only**, text truncated at ~4000 chars
-(`truncated: true`), page count kept. No text AND size > 1024 →
+(`truncated: true`), page count kept. Non-office containers
+(`extract.CONTAINER_EXT`: zip/tar/gz/7z/…) → `opaque: "container"`, never
+`needs_vision` — nothing extracts or renders an archive, so the vision
+promise would be unmeetable; residual lane, the decide agent opens one if it
+wants (`lu: "container"`). Otherwise: no text AND size > 1024 →
 `needs_vision: true` + page-1 PNG render. No text AND size ≤ 1024 →
 `opaque: "no-content"`. Duplicates grouped by (size, md5) with **no
-threshold and no group cap** (v1's DEDUP_MIN_SIZE missed 6/6 real groups).
+threshold and no group cap** (v1's DEDUP_MIN_SIZE missed 6/6 real groups) —
+**except zero-byte files**: every empty file is trivially byte-identical to
+every other (cloud placeholders, lock stubs), so size 0 is exempt from both
+duplicate grouping and the `known_as` md5 match. `known_as` is only set
+while the recorded copy still exists on disk — a `why` never cites a path
+that no longer resolves.
 
 Writes `bench/routing.json` (evidence columns) + `bench/renders/` +
-`bench/logs/collect.log` (counts mirrored on stdout).
+`bench/logs/collect.log` (counts mirrored on stdout). Entries the walk
+cannot take (dangling symlinks, unstatable files) are counted (`ignored`)
+and listed by name (`IGNORED <path> <- <reason>`) on stdout AND in
+collect.log — an invisible skip is a file that never gets sorted. Counts
+also break down candidates/selected/remaining PER configured inbox, so a
+sweep sized on one inbox cannot starve another in silence.
 
 `collect.py --render <path> --pages A-B` — on-demand renders for agents whose
 harness cannot read the original directly. The escalation READER is always
@@ -183,7 +209,11 @@ an agent; no script ever interprets content.
 
 **Default verb** — fills the triage columns of every entry:
 - **Vision barrier**: exit 2, listing the paths, if any entry still has
-  `needs_vision: true` and empty `text`. No judgement on unread bytes.
+  `needs_vision: true`, empty `text` and no decision. No judgement on unread
+  bytes — but an entry already carrying a decision passes: a withdrawal
+  (`unanswered`) is counted `withdrawn` and left untriaged, and a real user
+  decision on an unread file is triaged `propose` (the human judged; that is
+  the strongest evidence there is, and it must be able to close the pass).
 - Shadow predictions computed BEFORE guards (guards must not blind
   learning). Guard order: skip (known md5) → sensitive → duplicate →
   inbox (`inboxes:` file → propose, never a silent route) → entity tie.
@@ -213,6 +243,10 @@ an agent; no script ever interprets content.
 - Report `unanswered` BY NAME and write their memory lines
   (`decision: "unanswered"`) so selection re-picks them first. No
   `unrecorded` arithmetic, no `--force`.
+- Accept an entry whose `result` is stamped even without a triage — the
+  answered-withdrawal path (apply ran before route could stamp `propose`);
+  reported under `answered_withdrawals`. Refusing it would wedge the pass:
+  that exact sequence is what v2's cold test hit.
 - **Anchor check**: for each file in config `anchors:`, extract the
   backticked paths it cites and warn on any that no longer resolves — a dead
   pointer is a fact that left the instructions file and arrived nowhere.
@@ -268,7 +302,16 @@ The four v2 fixes:
 1. **Incremental memory**: each successful action appends its memory line
    IMMEDIATELY and stamps `result` in routing.json. A crash mid-pass leaves
    both exactly at the interruption point.
-2. **`--resume`**: skip entries whose `result` is stamped. `os.stat` guarded
+2. **`--resume`**: skip entries whose `result` is stamped, and RECONCILE
+   before replaying one that is not: a crash can land between the disk
+   gesture, the memory append and the `result` stamp, and replaying then
+   reports `FAIL … not found` while `--learn` invents a ghost `unanswered`.
+   A vanished source whose gesture is proven — a memory line from THIS pass
+   for the same content, or the file already at its decided destination with
+   matching size and md5 — is stamped `result` (its missing memory line
+   appended if the crash predated it) and reported `reconcile`. No md5, no
+   proof: the entry fails normally. `--resume` acts only with `--execute`
+   (alone it prints the dry-run of the remainder). `os.stat` guarded
    everywhere; a dangling symlink (`lexists` but not `exists`) = failed
    entry, the pass continues.
 3. **The sensitive probe trusts nothing**: text AND ids re-extracted from
@@ -322,9 +365,14 @@ sessions that never open the wiki; corpus facts move to the wiki, replaced
 by CONDITIONAL pointers "situation → path", never a bare link; original
 backed up to legacy/; every pointer mechanically checked; diff shown before
 writing) → **FIRST SWEEP** (replaces the old dry-run ending): a REAL first
-pass scoped to Desktop + Downloads — full machinery, nothing weakened:
-vision, triage, decide with the user's blocking questions, apply dry-run
-read together, then --execute. Target ~80% of both zones visibly emptied.
+pass scoped to ALL the configured inboxes — N = the SUM of their file
+counts (GRILL routinely surfaces a third inbox; sizing on two starves the
+rest), per-inbox selected/remaining counts checked — full machinery,
+nothing weakened: vision, triage, decide with the user's blocking
+questions, apply dry-run read together, then --execute. Honest target: an
+`empty`-policy inbox emptied or nearly so, a `transit` inbox reduced to its
+legitimate work in progress, the remainder named — never "~80% of both
+zones", which a WIP-laden Desktop cannot keep.
 Ends with a **bilan**: what moved where (counts + samples), and the
 residues BY NAME → written `unanswered`, re-selected first at the next
 pass. Tell the user explicitly: continue in this same conversation, or in
@@ -378,3 +426,14 @@ pipeline over the generated corpus (WIKIDOC_HOME at a temp dir, never ~/.wikidoc
 and grade the outcome against TRAPS.md. The manifest is the contract; how
 to check it is the agent's judgement. Deterministic where being wrong is
 expensive (the corpus), model-driven where judgement matters (the grading).
+
+## Open points — assumed limits, not bugs
+
+- **Sensitive duplicates are irreducible.** Byte-identical copies of a
+  sensitive document both land `propose` (duplicate + sensitive guards), and
+  apply's probe refuses a trash on either — the sensitive refusal has no
+  override (`reviewed: "vision"` only lifts the unreadable-text refusal). So
+  both copies live until the user removes one by hand, or a `move` files
+  them apart. Deliberate: the tool never bins sensitive content on its own
+  judgement, and the price is that it cannot deduplicate it either. Do not
+  "fix" this by weakening the guard.

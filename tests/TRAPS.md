@@ -40,7 +40,9 @@ double-count.
 
 **cp437 zip** (`Traps/archive-cp437.zip`) — entry names encoded cp437
 without the UTF-8 flag. Correct: zip_text decodes or degrades gracefully;
-no UnicodeDecodeError, no crash.
+no UnicodeDecodeError, no crash. As a non-office container it is
+`opaque: "container"` — NEVER `needs_vision` (nothing renders an archive) —
+and lands residual; an agent that opens it records `lu: "container"`.
 
 **Icon\r** (`Traps/Icon\r`) — a carriage return in the filename. Correct:
 walked, recorded, never mangled into a path that breaks routing.json or
@@ -57,7 +59,11 @@ moved without truncation.
 
 **200-char filename / zero-byte file** (`Traps/nnn…n.txt`, `Traps/vide.txt`)
 — boundary noise. Correct: both survive the walk; the empty file is
-`opaque: "no-content"` (size ≤ 1024, no text), never `needs_vision`.
+`opaque: "no-content"` (size ≤ 1024, no text), never `needs_vision`. Zero-byte
+files are also EXEMPT from duplicate grouping and from the `known_as` md5
+match: every empty file (cloud placeholder, lock stub, `Icon\r`) is trivially
+byte-identical to every other, and emptiness is not identity. Wrong: `vide.txt`
+grouped with `Icon\r`, or a `known_as` pointing at some other empty file.
 
 **Typographic apostrophe** (`Traps/Dossier d’archive/note d’honoraires.txt`)
 — U+2019 in both directory and filename. Correct: routed on content;
@@ -76,9 +82,14 @@ both trashed.
 
 **Dangling symlink** (`Traps/lien-mort.pdf` → missing target) — pinned v1
 bug: an unguarded `os.stat` killed the pass. Correct: `lexists` but not
-`exists` = a failed entry; collect and apply both continue past it, and if
-apply had already moved files, their memory lines are already written
-(incremental memory — see below).
+`exists` = collect never makes it an entry but COUNTS it (`ignored` in the
+stdout counts) and LISTS it (`IGNORED <path> <- dangling symlink` on stdout
+and in `bench/logs/collect.log`) — an inbox with `policy: empty` can never
+empty itself of a dead symlink, so an invisible skip is a lie about the inbox.
+Apply fails an entry that goes dangling mid-pass and continues, and if it had
+already moved files, their memory lines are already written (incremental
+memory — see below). Wrong: five passes with the symlink in no count and no
+log, which is exactly what v2's cold test caught.
 
 **Image-only sensitive scan** (`Inbox/scan-0042.pdf`) — a prescription whose
 text is drawn as pixels: readable by vision, empty to extraction. Correct:
@@ -188,3 +199,35 @@ backticked path that no longer resolves. Correct: `--learn` prints a
 warning naming the dead pointer; it never fails the pass, and it never
 silently ignores it — a dead pointer is a fact that left the instructions
 file and arrived nowhere.
+
+**Answered withdrawal closes the pass** — pinned v2 bug (cold test): withdraw
+a file in pass N, then in pass N+1 have the "user" answer — write a real
+decision (`move` + `dst`) on the still-unread entry. Correct: the decision
+counts as triage `propose` (a human judgement is the strongest evidence there
+is): `route.py` stamps that triage instead of exiting 2, and `--learn` accepts
+the entry once `result` is stamped even without a triage (reported under
+`answered_withdrawals`) — either order closes the pass. Wrong: apply performs
+the move, then `--learn` refuses ("entries without a triage") and `route.py`
+re-exits 2 — no verb can close the pass, the wedge v2's cold test hit.
+
+**Resume reconciliation** — pinned v2 bug (cold test): kill apply --execute
+between the memory append and the `result` stamp (or simulate: after a
+successful run, delete `result`/`final` from the moved entry in
+`bench/routing.json`). Correct: `apply.py --resume --execute` reconciles — the
+file already at its decided destination with matching size and md5 (or its
+memory line from this pass) is stamped `result` and reported `reconcile`; and
+`--learn` emits no `unanswered` for it. Wrong: the replay reports
+`FAIL … not found` and `--learn` records a ghost `unanswered` for a file that
+was handled. Note `--resume` alone prints a dry-run — dry-run stays apply's
+default in every mode.
+
+## Known, assumed limits (not bugs — do not "fix")
+
+**Sensitive duplicates are irreducible.** Two byte-identical copies of a
+sensitive document both hit the duplicate AND sensitive guards (`propose`),
+and a trash decision on either is refused by apply's probe — the sensitive
+refusal has no override, `reviewed: "vision"` only lifts the unreadable-text
+refusal. So both copies live until the user removes one by hand (or a `move`
+files them apart). This is the guard doing its job: the tool never bins
+sensitive content on its own judgement, and the price is that it cannot
+deduplicate it either. A grader must not count the surviving pair as a miss.
