@@ -324,6 +324,8 @@ def cmd_route(cfg):
               "         expected shadow or active", file=sys.stderr)
 
     counts, by_rule, by_shadow = {t: 0 for t in TRIAGE}, {}, {}
+    active_ids = {r.get("id") for r in cfg.get("rules") or []
+                  if r.get("status", "shadow") == "active"}
     withdrawn = 0
     for e in entries:
         if e.get("decision") == "unanswered":
@@ -342,6 +344,14 @@ def cmd_route(cfg):
             counts["propose"] += 1
             continue
         cols = route_entry(e, cfg)
+        # A shadow rule OBSERVES. It may fill the `shadow` column and nothing
+        # else — never a triage, never a destination, never a gesture. That is
+        # what makes a candidate rule safe to leave running for months on a
+        # real corpus, and it is checked here rather than merely intended: if a
+        # non-active rule ever reached the acting columns, the pass stops.
+        if cols["rule"] and cols["rule"] not in active_ids:
+            sys.exit("BUG: rule %r is not active but reached the routing "
+                     "columns — a shadow rule must never act" % cols["rule"])
         for k in ("_flat", "_rel", "_entity"):
             e.pop(k, None)
         e.update(cols)

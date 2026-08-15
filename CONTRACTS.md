@@ -475,15 +475,18 @@ expensive (the corpus), model-driven where judgement matters (the grading).
 
 ## Open points — assumed limits, not bugs
 
-- **Sensitive duplicates are irreducible.** Byte-identical copies of a
-  sensitive document both land `propose` (duplicate + sensitive guards), and
-  apply's probe refuses a trash on either — the sensitive refusal has no
-  override (`reviewed: "vision"` only lifts the unreadable-text refusal). So
-  both copies live until the user removes one by hand, or a `move` files
-  them apart. Deliberate: the tool never bins sensitive content on its own
-  judgement, and the price is that it cannot deduplicate it either. Do not
-  "fix" this by weakening the guard.
-
+- **Sensitive duplicates are reducible, under proof.** Byte-identical
+  copies of a sensitive document both land `propose` (duplicate + sensitive
+  guards). A trash on one is refused UNLESS the entry names a `keeper`:
+  apply then re-reads both files from disk at the moment of the gesture and
+  requires the keeper to exist, to differ from the source, to not be binned
+  by this same pass, and to hash identically. Only then does the sensitive
+  refusal lift — and the unreadable-text refusal with it, since neither
+  describes a risk once the same bytes are proven to survive. The guard was
+  never about copy count; it is about never losing sensitive CONTENT, and a
+  proven surviving twin is exactly that proof. Do not weaken it further: no
+  `reviewed:` flag, no config switch, no "trust the bench" shortcut may bin a
+  sensitive file — only a re-hashed survivor.
 
 ## Future improvements — noted, not scheduled
 

@@ -14,7 +14,7 @@ Scripts live in `scripts/`, next to this file. Resolve this file's directory onc
 
 - **Evidence** decides. Strength 3 = a validated identifier read in the content, 2 = a name read in the content, 1 = path or filename only — hearsay. A rule matching only strength-1 conditions is capped at `propose`.
 - Read a file before the gesture that touches it. The `propose` and `residual` triages exist for exactly that.
-- Removal goes to the OS bin — every gesture is reversible. A sensitive document is never routed automatically and never trashed unread: `apply.py` re-reads the file itself and refuses the entry. It can still be filed and renamed, which is the point of sorting it.
+- Removal goes to the OS bin — every gesture is reversible. A sensitive document is never routed automatically and never trashed unread: `apply.py` re-reads the file itself and refuses the entry. It can still be filed and renamed, which is the point of sorting it. The one refusal that lifts is deduplication: name a `keeper` and apply re-hashes both files at the moment of the gesture — same bytes, keeper present, keeper not itself being binned, or the refusal stands. The guard protects the content, not the copy count.
 - Duplicates are byte-identical or they are not duplicates. Zero-byte files group with nothing — emptiness is not identity. Same text, different bytes is a re-download: diff in full before keeping one.
 - A move counts once it is re-stat'ed at its destination.
 
@@ -27,7 +27,7 @@ One entry per selected file; each actor writes only its columns; empty columns a
 | `path size mtime md5 ext pages text truncated prose needs_vision render ids dates doc_year duplicate_of known_as known_desc opaque error` | collect.py | ① |
 | `text lu` (needs_vision entries only) | vision agent | ② |
 | `triage why guards rule entity strength destination shadow` | route.py | ③ |
-| `decision dst desc tags date_doc reviewed` | decide agent | ④ |
+| `decision dst desc tags date_doc reviewed keeper` | decide agent | ④ |
 | `result final` | apply.py | ⑤ |
 
 ## ① Collect
@@ -60,7 +60,7 @@ Done when every entry has a triage and no count surprises you. This verb only wr
 
 ## ④ Decide
 
-The `route` triage needs confirming, `propose` opening, `residual` eyes. Fill `decision` (`move|trash|tag|rename|none`), `dst` (trailing `/` files into that folder; anything else is the full path, which is how a rename is written), a `desc` that says something the filename does not, `tags`, `date_doc` (never invented), and `reviewed: "vision"` when you read the render this pass — the sensitive probe requires it before trashing a file whose text will not extract.
+The `route` triage needs confirming, `propose` opening, `residual` eyes. Fill `decision` (`move|trash|tag|rename|none`), `dst` (trailing `/` files into that folder; anything else is the full path, which is how a rename is written), a `desc` that says something the filename does not, `tags`, `date_doc` (never invented), and `reviewed: "vision"` when you read the render this pass — the sensitive probe requires it before trashing a file whose text will not extract. On a duplicate, `keeper` names the copy that stays; it is the only way a sensitive file is ever binned, and apply proves the bytes survive before acting.
 
 Blocking questions go to the user during this step, at the moment they arise — never batched to the end. What stays unsettled is left undecided; Learn will record it.
 
@@ -86,7 +86,7 @@ Done when `bench/` is gone from the workspace and every leftover is named in `wi
 
 ## Rules: born shadow, promoted by the user
 
-A rule earns its way in; it is never handed over on the strength of looking right. Born `status: shadow` from `--learn` only, evaluated on every pass, never applied — passes, hits, agreed, **disagreed** accumulate in the rule itself. After ≥5 passes with zero disagreement:
+A rule earns its way in; it is never handed over on the strength of looking right. Born `status: shadow` from `--learn` only, evaluated on every pass, **never applied — a shadow rule fills its own column and nothing else, and route.py stops the pass if a non-active rule ever reaches the routing columns** — passes, hits, agreed, **disagreed** accumulate in the rule itself. After ≥5 passes with zero disagreement:
 
 1. `route.py --audit <rule-id>` — replay against memory: retroactive precision on files already judged, diverging files listed. Cheap, read-only, runs anytime.
 2. `route.py --full-audit <rule-id>` — confront the whole disk, including what no pass ever judged. Beyond 500 candidates it says so and you sample. No ground truth here — the list is for human judgement.

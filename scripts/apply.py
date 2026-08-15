@@ -202,6 +202,45 @@ def own_text(path, ext):
 # without a `text` column would silently disable every content-based test.
 
 
+def surviving_twin(entry, src, cfg, also_binned=()):
+    """The ONE thing that lets a sensitive document be binned: a byte-identical
+    copy of it stays on disk.
+
+    The sensitive guard exists so no sensitive CONTENT is ever lost. It used to
+    forbid every trash, which also made a sensitive document impossible to
+    deduplicate: three copies of a legal file stayed three copies forever. That
+    is not protection, it is paralysis — the content was never at risk.
+
+    So a `keeper` may be named on the entry, and the guard steps aside for that
+    entry alone, under conditions checked HERE, from disk, at the moment of the
+    gesture — never from the bench:
+
+      the keeper exists · it is not the source itself · its md5 is recomputed
+      now and equals the source's, recomputed now too
+
+    Returns the keeper's absolute path, or None (and the trash stays refused).
+    Anything unreadable, moved or altered since the pass was planned fails the
+    check, because both hashes are taken fresh.
+    """
+    keeper = entry.get("keeper")
+    if not keeper:
+        return None
+    kp = os.path.expanduser(keeper)
+    if not os.path.isabs(kp):
+        kp = os.path.join(cfg["root"], kp)
+    kp = resolve(kp)
+    if not kp or not os.path.exists(kp):
+        return None
+    if os.path.realpath(kp) == os.path.realpath(src):
+        return None                      # a file is not its own survivor
+    if os.path.realpath(kp) in also_binned:
+        return None                      # nor is a file this pass is also binning
+    h_src, h_keep = file_md5(src), file_md5(kp)
+    if not h_src or h_src != h_keep:
+        return None
+    return kp
+
+
 # ---------------------------------------------------------------- main ------
 def main():
     execute = "--execute" in sys.argv[1:]
@@ -229,6 +268,9 @@ def main():
         f.write(pass_name)
     guards = self_ingestion_guard(cfg)
     sources = pass_roots(cfg)      # root, plus the inboxes that live outside it
+    # every file this bench intends to bin: a keeper among them keeps nothing
+    binned_here = {os.path.realpath(x["path"]) for x in entries
+                   if x.get("decision") == "trash" and x.get("path")}
 
     done, failed, refused = [], [], []
     skipped = {"done": 0, "undecided": 0}
@@ -340,12 +382,19 @@ def main():
             if not cfg.get("sensitive"):
                 refused.append((raw, "config declares no `sensitive:` — "
                                      "nothing is binned until it does")); continue
+            # Checked first, from disk: a byte-identical copy that stays. It is
+            # the one fact that makes binning this file lossless, so it is also
+            # the one thing that can lift a refusal — both of them, since
+            # neither "I could not read it" nor "it is sensitive" describes a
+            # risk once the same bytes are proven to survive elsewhere.
+            twin = surviving_twin(e, src, cfg, binned_here)
             text = own_text(src, ext)
             # Debris is not a reading: a binary .doc hands the text fallback
             # replacement-char soup — non-empty, so the old emptiness test
             # believed it had read the file. Language or nothing.
             readable = bool(text) and extract.looks_like_prose(text)
-            if not readable and st.st_size > 1024 and e.get("reviewed") != "vision":
+            if not readable and st.st_size > 1024 and not twin \
+                    and e.get("reviewed") != "vision":
                 refused.append((raw, "no readable text re-extracted from a "
                                      "non-trivial file (empty or extractor "
                                      "debris) — kept until reviewed with vision")); continue
@@ -356,8 +405,12 @@ def main():
             hit = extract.sensitive_hit({"path": src, "_rel": rel_src,
                                          "text": text or "", "ext": ext,
                                          "ids": ids, "size": st.st_size}, cfg)
-            if hit:
+            if hit and not twin:
                 refused.append((raw, f"sensitive ({hit}) — kept")); continue
+            if twin:
+                base["reason"] = (base["reason"] or "") + \
+                    " — binned only because %s keeps the same bytes" \
+                    % nfc(mem.rel(twin))
             try:
                 rec = mem.record(**{**base, "path": rel_src,
                                     "md5": file_md5(src, st.st_size),
