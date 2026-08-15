@@ -31,7 +31,7 @@ from fnmatch import fnmatch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract  # noqa: E402
 from memory import (Memory, file_md5, is_inside, nfc, norm, pass_id,  # noqa: E402
-                    require_config, self_ingestion_guard)
+                    require_config, self_ingestion_guard, write_json_atomic)
 
 MINIMAL = os.environ.get("WIKIDOC_MINIMAL") == "1"
 DECISIONS = ("move", "rename", "trash", "tag", "none")
@@ -83,10 +83,9 @@ def free_destination(src, dst):
     return dst, None
 
 
-def to_bin(path, cfg, pass_name, execute):
-    """The OS bin when it exists, a dated folder in the workspace otherwise."""
-    if not execute:
-        return "would go to the bin"
+def to_bin(path, cfg, pass_name):
+    """The OS bin when it exists, a dated folder in the workspace otherwise.
+    Only called under --execute: the dry-run branch never reaches it."""
     if not MINIMAL:
         try:
             from send2trash import send2trash
@@ -112,13 +111,6 @@ def enrich(path, desc, tags, meta, cfg):
                             tag_colors=cfg.get("tags") or {})
     except Exception:
         pass                     # best effort: a pass is correct without it
-
-
-def save_routing(path, data):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
 
 
 # --------------------------------------------------------------- probe ------
@@ -205,7 +197,7 @@ def main():
         memory_lines += 1
         entry["result"] = result
         entry["final"] = final
-        save_routing(routing_path, data)
+        write_json_atomic(routing_path, data)
         done.append((kind, entry["path"], shown))
 
     for e in entries:
@@ -231,6 +223,8 @@ def main():
             failed.append((raw, "dangling symlink" if os.path.lexists(raw)
                            else "not found")); continue
         if not os.path.exists(src):
+            # not redundant: resolve()'s listdir branch can hand back an
+            # NFC-twin entry that is itself a dangling symlink
             failed.append((raw, "dangling symlink")); continue
         st = stat_or_none(src)
         if st is None:
@@ -303,7 +297,7 @@ def main():
                 done.append(("trash", raw, "would go to the bin"))
                 memory_lines += 1; continue
             try:
-                where = to_bin(src, cfg, pass_name, execute)
+                where = to_bin(src, cfg, pass_name)
             except OSError as err:
                 failed.append((raw, str(err))); continue
             act(e, rec, "trashed", nfc(str(where)), "trash", where)

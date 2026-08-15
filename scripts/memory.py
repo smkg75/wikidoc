@@ -164,6 +164,14 @@ def pass_id(mem):
     return f"{today}-{n}"
 
 
+def write_json_atomic(path, data):
+    """Temp file + rename: the working file is never half-written."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
 # ---------------------------------------------------------------- memory ----
 class Memory:
     """Append-only JSONL. Last line per path is the truth."""

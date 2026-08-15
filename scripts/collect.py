@@ -36,20 +36,15 @@ from fnmatch import fnmatch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from memory import (Memory, file_md5, flatten, is_inside, nfc,  # noqa: E402
-                    require_config, self_ingestion_guard)
+                    require_config, self_ingestion_guard, write_json_atomic)
 import extract  # noqa: E402
 
 TEXT_CAP = 4000
 OPAQUE_MAX = 1024          # no text and this few bytes: nothing to see either
 
-TEXT_EXT = {".txt", ".md", ".csv", ".tsv", ".log", ".json", ".xml", ".html",
-            ".htm", ".js", ".py", ".sh", ".yml", ".yaml", ".webloc", ".plist",
-            ".css", ".less", ".scss", ".ts", ".tsx", ".jsx", ".sql", ".toml",
-            ".ini", ".conf", ".svg", ".vcf", ".ics", ".eml"}
-IMG_EXT = {".png", ".jpg", ".jpeg", ".heic", ".heif", ".gif", ".webp", ".tif",
-           ".tiff", ".bmp"}
-OFFICE_EXT = {".docx", ".odt", ".pptx", ".xlsx"}
-GATED_EXT = {".pdf"} | OFFICE_EXT   # extractor-mediated: debris can pass for text
+# extension tables live in extract.py, next to the readers they gate
+GATED_EXT = {".pdf"} | set(extract.ZIP_XML)   # extractor-mediated: debris can
+                                              # pass for text
 
 
 # ------------------------------------------------------------- selection ----
@@ -140,13 +135,13 @@ def page1_text(path, ext):
     """
     if ext == ".pdf":
         return extract.pdf_text(path)
-    if ext in OFFICE_EXT:
+    if ext in extract.ZIP_XML:
         return extract.zip_text(path, extract.ZIP_XML[ext])
     if ext == ".rtf":
         return extract.rtf_text(path)
-    if ext in IMG_EXT:
+    if ext in extract.IMG_EXT:
         return None
-    if ext in TEXT_EXT or extract.looks_textual(path):
+    if ext in extract.TEXT_EXT or extract.looks_textual(path):
         return extract.read_text_file(path)
     return None
 
@@ -185,7 +180,7 @@ def prep_entry(cfg, path, size, mtime, ws, render_dir, idx, md5s):
         e["needs_vision"] = True
         out = os.path.join(render_dir, f"{idx:04d}-p1.png")
         ok = (extract.pdf_render(path, out) if ext == ".pdf"
-              else extract.image_render(path, out) if ext in IMG_EXT
+              else extract.image_render(path, out) if ext in extract.IMG_EXT
               else False)
         if ok:
             e["render"] = os.path.relpath(out, ws)
@@ -195,13 +190,6 @@ def prep_entry(cfg, path, size, mtime, ws, render_dir, idx, md5s):
 
 
 # ------------------------------------------------------------------ main ----
-def write_atomic(path, data):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
-
-
 def render_verb(cfg, path, pages):
     """On-demand renders for an escalating agent. The READER is the agent —
     this verb only converts pages to pixels."""
@@ -302,7 +290,7 @@ def main():
                      + (f" opaque={e['opaque']}" if e.get("opaque") else "")
                      + (f" ERROR={e['error']}" if e.get("error") else ""))
 
-    write_atomic(os.path.join(bench, "routing.json"), entries)
+    write_json_atomic(os.path.join(bench, "routing.json"), entries)
     with open(os.path.join(log_dir, "collect.log"), "w", encoding="utf-8") as f:
         # the counts step 1 is judged on go in the log too: stdout scrolls
         # away, and re-running the script to see them is what the log avoids

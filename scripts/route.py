@@ -30,11 +30,13 @@ from fnmatch import fnmatch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract  # noqa: E402
 from memory import (Memory, is_inside, nfc, norm, pass_id, require_config,  # noqa: E402
-                    self_ingestion_guard)
+                    self_ingestion_guard, write_json_atomic)
 
 TRIAGE = ("route", "propose", "residual", "skip")
 WEAK = {"name_matches", "path_under", "ext", "ext_in", "size_gt", "size_lt"}
 IDS = {"ids_any", "id_kind_present"}
+# narrower than extract.TEXT_EXT on purpose: --full-audit reads documents,
+# not code checkouts
 TEXT_EXT = {".txt", ".md", ".csv", ".log", ".json", ".xml", ".html", ".htm",
             ".eml", ".yml", ".yaml"}
 NGRAM_MIN, NGRAM_MAX = 2, 5
@@ -340,17 +342,8 @@ def load_routing(bench):
         sys.exit("no bench/routing.json — run collect.py first")
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    entries = data if isinstance(data, list) else (data.get("entries")
-                                                   or data.get("files") or [])
+    entries = data if isinstance(data, list) else data.get("entries") or []
     return data, entries
-
-
-def save_routing(bench, data):
-    """Atomic: the working file is never half-written, whoever reads next."""
-    tmp = os.path.join(bench, ".routing.json.tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, os.path.join(bench, "routing.json"))
 
 
 def rel_to_root(p, cfg):
@@ -396,7 +389,7 @@ def cmd_route(cfg):
             by_rule[cols["rule"]] = by_rule.get(cols["rule"], 0) + 1
         for s in cols["shadow"]:
             by_shadow[s["rule"]] = by_shadow.get(s["rule"], 0) + 1
-    save_routing(bench, data)
+    write_json_atomic(os.path.join(bench, "routing.json"), data)
     print(json.dumps({"entries": len(entries), "triage": counts,
                       "by_rule": by_rule, "by_shadow": by_shadow,
                       "routing": os.path.join(bench, "routing.json")},
