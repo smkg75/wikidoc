@@ -634,7 +634,13 @@ def pass_of(entries, mem, cfg):
     """The pass being closed, read off the memory lines apply just wrote."""
     votes = {}
     for e in entries:
-        rec = mem.by_path.get(nfc(rel_to_root(e.get("final") or e["path"], cfg)))
+        # a trashed file's `final` is "bin", which indexes nothing: its memory
+        # line lives under the path it had. A pass of nothing but removals used
+        # to collect zero votes and archive itself under the NEXT pass number.
+        final = e.get("final")
+        if not final or e.get("decision") == "trash":
+            final = e["path"]
+        rec = mem.by_path.get(nfc(rel_to_root(final, cfg)))
         if rec and rec.get("pass"):
             votes[rec["pass"]] = votes.get(rec["pass"], 0) + 1
     return max(votes, key=votes.get) if votes else pass_id(mem)
