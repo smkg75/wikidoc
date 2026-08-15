@@ -87,13 +87,19 @@ stdlib zlib/struct PNG encoder, carried from v1), `zip_text`, docx/odt/rtf
 text, `read_text_file`, `looks_like_prose` (with the mid-word-capital
 rejection), `image_render` (HEIC and friends via `sips`, best effort,
 macOS-guarded), `extract_ids(text, cfg)`, `extract_dates(text)`,
-`doc_year(dates)`.
+`doc_year(dates)` — and the **condition engine**: `COND`, `matches()`
+(all/any/not grammar) and `sensitive_hit(entry, cfg)`. The engine lives here
+because two STEPS evaluate config conditions — route.py for triage,
+apply.py for the trash probe — and steps may not import steps; a second,
+smaller matcher in apply is how v1's weakest copy ended up guarding the
+most sensitive files. One matcher, one notion of what a condition means.
 
 - **Identifiers are validated, not just matched**: SIREN/SIRET must pass
   Luhn; IBAN must pass mod-97; a configured pattern may declare
   `validate: luhn|iban|none`. A candidate failing its check is NOT an id
   (any 9 digits passed the v1 regex). `normalise_id` squeezes only all-digit
-  values.
+  values. The builtin IBAN pattern accepts group tails under 4 chars — a
+  French IBAN ends on 3 — and lets the mod-97 check do the real filtering.
 - Dates: v1 forms plus `MM/YYYY`. `doc_year` only from recognised dates,
   bounded 1900..current_year+1. Never a bare year harvested from text.
 - `WIKIDOC_MINIMAL=1`: pdf text/render unavailable. extract.py returns None
@@ -115,13 +121,19 @@ writes are atomic (temp file + rename). Empty columns = remaining work;
 | columns | writer | step |
 |---|---|---|
 | `path size mtime md5 ext pages text truncated prose needs_vision render ids dates doc_year duplicate_of known_as known_desc opaque error` | collect.py | ① |
-| `text lu` (needs_vision entries only) | vision agent | ② |
+| `text lu` — or, on an unreadable file, `decision: "unanswered"` + `reason` (the withdrawal) | vision agent | ② |
 | `triage why guards rule entity strength destination shadow` | route.py | ③ |
 | `decision dst desc tags date_doc reviewed` | decide agent | ④ |
 | `result final` | apply.py | ⑤ |
 
 `lu`: `"text"` (extracted layer sufficed) · `"render"` (read from PNG) ·
 `"pages N-M"` (agent escalated and read the original's targeted pages).
+`lu` is NEVER set on a file that was not read. A file that survives every
+reader — render, `Read` on the original, `collect.py --render`, conversion —
+is **withdrawn**: `decision: "unanswered"` with a `reason` naming each
+attempt (`"tried: render p1, Read p1-2, sips — all failed"`). The retry is
+real and mandatory before withdrawal; the file is re-selected FIRST next
+pass, so a lazy withdrawal buys nothing and shows in its own reason.
 
 Entry lifecycle (a 2-page scan, abridged):
 
