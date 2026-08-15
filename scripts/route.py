@@ -286,14 +286,15 @@ def cmd_route(cfg):
     bench = os.path.join(cfg["workspace"], "bench")
     data, entries = load_routing(bench)
 
-    # The only way past the barrier is withdrawal: `decision: "unanswered"`
-    # with a reason listing every read attempt (render p1, Read on the
-    # original, --render on other pages, conversion). A withdrawn file is
-    # never triaged, never carries `lu`, and comes back FIRST next pass —
-    # the retry is the next pass, not a shrug.
+    # Two ways past the barrier. Withdrawal: `decision: "unanswered"` with a
+    # reason listing every read attempt (render p1, Read on the original,
+    # --render on other pages, conversion) — never triaged, never `lu`, comes
+    # back FIRST next pass. Or a real decision already on the entry: the user
+    # answered about a withdrawn file, and a human judgement is the strongest
+    # evidence there is — that entry is triaged `propose` below, not blocked.
     blocked = [e["path"] for e in entries
                if e.get("needs_vision") and not (e.get("text") or "").strip()
-               and e.get("decision") != "unanswered"]
+               and not e.get("decision")]
     if blocked:
         print("vision barrier — no judgement on unread bytes; still unread:",
               file=sys.stderr)
@@ -315,6 +316,18 @@ def cmd_route(cfg):
     for e in entries:
         if e.get("decision") == "unanswered":
             withdrawn += 1          # withdrawn, unread: no triage on no evidence
+            continue
+        if e.get("needs_vision") and not (e.get("text") or "").strip() \
+                and e.get("decision"):
+            # the user answered about a file nothing could read: no judgement
+            # on the bytes, but the decision itself is evidence — the human
+            # judged. That is `propose` by definition, and it closes the pass.
+            e.update({"triage": "propose",
+                      "why": f"user decision {e['decision']!r} on an unread "
+                             "entry — the human judged it",
+                      "guards": [], "rule": None, "entity": None,
+                      "strength": None, "destination": None, "shadow": []})
+            counts["propose"] += 1
             continue
         cols = route_entry(e, cfg)
         for k in ("_flat", "_rel", "_entity"):
@@ -646,10 +659,16 @@ def archive_bench(ws, pass_name):
 def cmd_learn(cfg):
     ws = cfg["workspace"]
     data, entries = load_routing(os.path.join(ws, "bench"))
+    # A result stamped without a triage is the answered-withdrawal path: the
+    # user decided about a file nothing could read, apply performed it. The
+    # decision stands in for the triage (a human judgement IS `propose`);
+    # refusing to close the pass over it would wedge every such answer.
     if any("triage" not in e and e.get("decision") != "unanswered"
-           for e in entries):
+           and not e.get("result") for e in entries):
         sys.exit("routing.json has entries without a triage — run route.py first"
-                 " (withdrawn entries are the one exception)")
+                 " (withdrawn and already-applied entries are the exceptions)")
+    answered = [nfc(rel_to_root(e["path"], cfg)) for e in entries
+                if "triage" not in e and e.get("result")]
     mem = Memory(root=cfg["root"])
     pass_name = pass_of(entries, mem, cfg)
     cfg_path = os.path.join(ws, "config.yaml")
@@ -696,6 +715,7 @@ def cmd_learn(cfg):
                       "born": [r["id"] for r in born],
                       "ripe": [r["id"] for r in ripe],
                       "retire": retire, "unanswered": named,
+                      "answered_withdrawals": answered,
                       "anchor_warnings": warnings, "archived": archived},
                      ensure_ascii=False, indent=1))
 

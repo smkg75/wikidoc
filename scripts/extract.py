@@ -32,6 +32,11 @@ IMG_EXT = {".png", ".jpg", ".jpeg", ".heic", ".heif", ".gif", ".webp", ".tif",
            ".tiff", ".bmp"}
 ZIP_XML = {".docx": r"word/document\.xml", ".odt": r"content\.xml",
            ".pptx": r"ppt/slides/slide\d+\.xml", ".xlsx": r"xl/sharedStrings\.xml"}
+# Non-office containers: no extractor reads them and no renderer draws them,
+# so `needs_vision` would be a promise nothing can keep. collect.py marks them
+# `opaque: "container"` — residual lane; the decide agent opens one if it wants.
+CONTAINER_EXT = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar",
+                 ".dmg", ".iso"}
 
 BUILTIN_IDS = {
     # A French IBAN printed in groups of four ends on a 3-char tail

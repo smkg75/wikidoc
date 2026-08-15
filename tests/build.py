@@ -252,7 +252,8 @@ def build(target):
     with zipfile.ZipFile(zpath, "w") as z:
         info = zipfile.ZipInfo("donnée.txt".encode("utf-8").decode("cp437"))
         z.writestr(info, "contenu")
-    add("Traps/archive-cp437.zip", "residual", "cp437 zip entry names")
+    add("Traps/archive-cp437.zip", "residual",
+        "cp437 zip entry names; container: opaque, never needs_vision")
     traps["cp437_zip"] = True
 
     # a file literally called Icon\r
@@ -262,8 +263,8 @@ def build(target):
             f.write(b"")
         traps["icon_cr"] = os.path.exists(icon)
         if traps["icon_cr"]:
-            add("Traps/Icon\r", "propose", "carriage return in the filename; "
-                "zero-byte twin of vide.txt -> duplicate guard")
+            add("Traps/Icon\r", "residual", "carriage return in the filename; "
+                "zero bytes: exempt from duplicate grouping")
     except OSError:
         traps["icon_cr"] = False
 
@@ -290,8 +291,9 @@ def build(target):
 
     # zero-byte and huge-name files
     write(os.path.join(target, "Traps/vide.txt"), "")
-    add("Traps/vide.txt", "propose", "zero bytes, opaque no-content; "
-        "byte-identical to Icon\\r when that trap held -> duplicate guard")
+    add("Traps/vide.txt", "residual", "zero bytes, opaque no-content; "
+        "emptiness is not identity: never grouped with Icon\\r or any "
+        "other empty file, never a known_as match")
     long_name = "Traps/" + "n" * 200 + ".txt"
     try:
         write(os.path.join(target, long_name), "nom tres long\n")
@@ -307,8 +309,10 @@ def build(target):
         os.symlink("cible-disparue.pdf", link)
         traps["dangling_symlink"] = (os.path.lexists(link)
                                      and not os.path.exists(link))
-        add("Traps/lien-mort.pdf", "residual",
-            "dangling symlink: guarded stat, failed entry, pass continues")
+        add("Traps/lien-mort.pdf", "ignored",
+            "dangling symlink: never an entry — collect counts and lists it "
+            "IGNORED (stdout + collect.log); apply fails an entry that goes "
+            "dangling mid-pass and the pass continues")
     except OSError:
         traps["dangling_symlink"] = False
 

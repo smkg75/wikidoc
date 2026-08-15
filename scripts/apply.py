@@ -111,6 +111,64 @@ def enrich(path, desc, tags, meta, cfg):
         pass                     # best effort: a pass is correct without it
 
 
+# ----------------------------------------------------------- reconcile ------
+def reconcile(e, decision, raw, cfg, mem, pass_name):
+    """Was this gesture already performed by an interrupted run?
+
+    A crash can land between the disk gesture, the memory append and the
+    `result` stamp. Replaying such an entry reports `FAIL … not found` and
+    --learn then invents an unanswered ghost for a file that was handled.
+    So before failing a vanished source on --resume, look for the proof the
+    gesture happened: a memory line from THIS pass for the same content, or
+    the file already sitting at the decided destination with matching size
+    and md5. Without an md5 there is no proof — the entry fails normally.
+
+    Returns (final, rec_to_append_or_None) — rec is only set when the crash
+    predates the memory append, so the line still has to be written.
+    """
+    md5, root = e.get("md5"), cfg["root"]
+    if not md5:
+        return None
+    for rec in mem.seen_md5(md5) or []:
+        if rec.get("pass") != pass_name or rec.get("decision") != decision:
+            continue
+        if decision in ("move", "rename"):
+            p = resolve(os.path.join(root, rec.get("path", "")))
+            st = stat_or_none(p) if p else None
+            if st and st.st_size == rec.get("size") \
+                    and file_md5(p, st.st_size) == md5:
+                return rec["path"], None
+        elif decision == "trash":
+            return "bin", None            # the bin holds it; the line exists
+    if decision in ("move", "rename") and e.get("dst"):
+        # gesture done, crash before the append: memory has nothing, but the
+        # file already sits at the decided destination with the same bytes
+        dst = os.path.expanduser(e["dst"])
+        if not os.path.isabs(dst):
+            dst = os.path.join(root, dst)
+        if dst.endswith(os.sep) or os.path.isdir(dst):
+            dst = os.path.join(dst, os.path.basename(raw))
+        p = resolve(dst)
+        st = stat_or_none(p) if p else None
+        if st and st.st_size == e.get("size") \
+                and file_md5(p, st.st_size) == md5:
+            final = nfc(os.path.relpath(p, root))
+            kw = {"pass_id": pass_name,
+                  "triage": e.get("triage") or e.get("level") or "propose",
+                  "decision": decision, "reason": e.get("why") or "",
+                  "size": st.st_size, "mtime": int(st.st_mtime), "md5": md5,
+                  "desc": e.get("desc"), "ids": e.get("ids"),
+                  "tags": e.get("tags"), "date_doc": e.get("date_doc"),
+                  "provenance": "pass"}
+            try:
+                rec = mem.record(final, **kw)
+            except ValueError:            # a bad desc never blocks the line:
+                kw["desc"] = None         # incremental memory beats a lost desc
+                rec = mem.record(final, **kw)
+            return final, rec
+    return None
+
+
 # --------------------------------------------------------------- probe ------
 def own_text(path, ext):
     """Re-read the file's text; the probe trusts nothing already written down.
@@ -200,6 +258,19 @@ def main():
                                 "ingest itself")); continue
         src = resolve(raw)
         if not src:
+            got = reconcile(e, decision, raw, cfg, mem, pass_name) \
+                if resume else None
+            if got:                   # gesture already done by a killed run
+                final, rec = got
+                done.append(("reconcile", raw, final))
+                if rec:
+                    memory_lines += 1
+                if execute:
+                    if rec:
+                        mem.append(rec)
+                    e["result"], e["final"] = RESULT[decision], final
+                    write_json_atomic(routing_path, data)
+                continue
             failed.append((raw, "dangling symlink" if os.path.lexists(raw)
                            else "not found")); continue
         if not os.path.exists(src):
@@ -212,7 +283,10 @@ def main():
 
         ext = os.path.splitext(src)[1].lower()
         rel_src = nfc(os.path.relpath(src, root))
-        base = {"pass_id": pass_name, "triage": e.get("triage") or e.get("level"),
+        # no triage but a decision = the answered-withdrawal path: a human
+        # judgement counts as `propose` (route.py stamps the same)
+        base = {"pass_id": pass_name,
+                "triage": e.get("triage") or e.get("level") or "propose",
                 "decision": decision, "reason": e.get("why") or "",
                 "size": st.st_size, "mtime": int(st.st_mtime),
                 "desc": e.get("desc"), "tags": e.get("tags"),
@@ -292,6 +366,15 @@ def main():
             act(e, rec, "trashed", nfc(str(where)), "trash", where)
 
         else:                                   # tag, none
+            prev = mem.by_path.get(rel_src)
+            if resume and prev and prev.get("pass") == pass_name \
+                    and prev.get("decision") == decision:
+                # line already written by a killed run; only the stamp is due
+                done.append(("reconcile", raw, rel_src))
+                if execute:
+                    e["result"], e["final"] = RESULT[decision], rel_src
+                    write_json_atomic(routing_path, data)
+                continue
             try:
                 rec = mem.record(**{**base, "path": rel_src, "md5": None,
                                     "ids": e.get("ids")})

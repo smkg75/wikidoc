@@ -55,13 +55,15 @@ def excluded(rel, patterns):
 
 
 def inbox_dirs(cfg):
+    """[(configured path, absolute path)] — the first is the reporting key."""
     out = []
     for i in cfg.get("inboxes", []):
-        p = os.path.expanduser(i.get("path", "") if isinstance(i, dict) else i)
+        raw = i.get("path", "") if isinstance(i, dict) else i
+        p = os.path.expanduser(raw)
         if p and not os.path.isabs(p):
             p = os.path.join(cfg["root"], p)
         if p:
-            out.append(p)
+            out.append((raw, p))
     return out
 
 
@@ -78,11 +80,16 @@ def walk_select(cfg, mem, limit, md5s):
     Sizes of everything scanned come back too: duplicate detection needs the
     whole disk, not just the batch. Only stat-drifted files are hashed here —
     that is what keeps a pass over tens of thousands of files cheap.
+
+    What the walk cannot take (dangling symlinks, unstatable files) comes
+    back named in `ignored`: an inbox with `policy: empty` can never empty
+    itself of a dead symlink, and a skip nobody can see is a file that
+    silently never gets sorted.
     """
     root, guards = cfg["root"], self_ingestion_guard(cfg)
     excl = cfg.get("exclude", [])
     inboxes = inbox_dirs(cfg)
-    sizes, cands = {}, []
+    sizes, cands, ignored = {}, [], []
     counts = {"scanned": 0, "seen": 0}
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         if any(is_inside(dirpath, g) for g in guards):
@@ -101,13 +108,17 @@ def walk_select(cfg, mem, limit, md5s):
             try:
                 st = os.stat(p)
             except OSError:
-                continue        # dangling symlink, or vanished mid-walk
+                ignored.append((nfc(p), "dangling symlink"
+                                if os.path.islink(p) else "unstatable"))
+                continue
             size, mtime = st.st_size, int(st.st_mtime)
             counts["scanned"] += 1
             sizes.setdefault(size, []).append(p)
+            inbox = next((disp for disp, ap in inboxes if is_inside(p, ap)),
+                         None)
             rec = mem.by_path.get(rel)
             if rec is not None and rec.get("decision") == "unanswered":
-                cands.append((0, p, size, mtime))     # re-selected first
+                cands.append((0, p, size, mtime, inbox))  # re-selected first
                 continue
             if rec is not None and (rec.get("size"), rec.get("mtime")) == (size, mtime):
                 counts["seen"] += 1
@@ -118,11 +129,22 @@ def walk_select(cfg, mem, limit, md5s):
                 if hashed(p, size, md5s) == rec.get("md5"):
                     counts["seen"] += 1
                     continue
-            cands.append((1 if any(is_inside(p, i) for i in inboxes) else 2,
-                          p, size, mtime))
+            cands.append((1 if inbox else 2, p, size, mtime, inbox))
     cands.sort(key=lambda c: c[0])      # stable: walk order within each band
     counts["candidates"] = len(cands)
-    return cands[:limit], sizes, counts
+    picked = cands[:limit]
+    # per-inbox accounting: a sweep sized on one inbox starves the others,
+    # and only these numbers show it
+    per = {disp: {"candidates": 0, "selected": 0} for disp, _ in inboxes}
+    for c in cands:
+        if c[4]:
+            per[c[4]]["candidates"] += 1
+    for c in picked:
+        if c[4]:
+            per[c[4]]["selected"] += 1
+    counts["inboxes"] = {d: {**v, "remaining": v["candidates"] - v["selected"]}
+                         for d, v in per.items()}
+    return picked, sizes, counts, ignored
 
 
 # ------------------------------------------------------------ extraction ----
@@ -176,6 +198,11 @@ def prep_entry(cfg, path, size, mtime, ws, render_dir, idx, md5s):
             year = extract.doc_year(dates)
             if year:
                 e["doc_year"] = year
+    elif ext in extract.CONTAINER_EXT:
+        # nothing extracts an archive and nothing renders one: `needs_vision`
+        # would be unmeetable. Residual lane; the decide agent opens it if it
+        # wants to, recording `lu: "container"` when it reads the listing.
+        e["opaque"] = "container"
     elif size > OPAQUE_MAX:
         e["needs_vision"] = True
         out = os.path.join(render_dir, f"{idx:04d}-p1.png")
@@ -244,32 +271,40 @@ def main():
         os.makedirs(d, exist_ok=True)
 
     md5s = {}
-    picked, sizes, counts = walk_select(cfg, mem, limit, md5s)
+    picked, sizes, counts, ignored = walk_select(cfg, mem, limit, md5s)
     counts.update(selected=len(picked),
                   unanswered=sum(1 for c in picked if c[0] == 0),
                   inbox=sum(1 for c in picked if c[0] == 1),
+                  ignored=len(ignored),
                   with_text=0, needs_vision=0, opaque=0,
                   duplicates=0, known_content=0, errors=0)
 
     entries, lines = [], []
     root = cfg["root"]
-    for idx, (_, p, size, mtime) in enumerate(picked, 1):
+    for idx, (_, p, size, mtime, _ib) in enumerate(picked, 1):
         e = prep_entry(cfg, p, size, mtime, ws, render_dir, idx, md5s)
 
         # identity is (size, md5) — every size twin gets hashed, no threshold,
-        # no group cap: a 200-byte duplicate is still a duplicate
-        if e["md5"]:
+        # no group cap: a 200-byte duplicate is still a duplicate. Except at
+        # zero bytes: every empty file (cloud placeholders, lock stubs) is
+        # trivially byte-identical to every other, and emptiness is not
+        # identity — no duplicate group, no known_as match.
+        if e["md5"] and size:
             twins = [q for q in sizes.get(size, [])
                      if q != p and hashed(q, size, md5s) == e["md5"]]
             if twins:
                 e["duplicate_of"] = twins
                 counts["duplicates"] += 1
             # same content already recorded under another name: a move,
-            # not new work — route.py will triage it `skip`
+            # not new work — route.py will triage it `skip`. Only while the
+            # recorded copy still exists: if it is gone (trashed, moved out),
+            # this file is the only copy now, and a `why` must never cite a
+            # path that no longer resolves.
             prev = mem.seen_md5(e["md5"])
             if isinstance(prev, list):
                 prev = prev[-1] if prev else None
-            if prev and prev.get("path") != nfc(os.path.relpath(p, root)):
+            if prev and prev.get("path") != nfc(os.path.relpath(p, root)) \
+                    and os.path.exists(mem.abs(prev.get("path", ""))):
                 e["known_as"] = prev.get("path")
                 if prev.get("desc"):
                     e["known_desc"] = prev.get("desc")
@@ -290,13 +325,19 @@ def main():
                      + (f" opaque={e['opaque']}" if e.get("opaque") else "")
                      + (f" ERROR={e['error']}" if e.get("error") else ""))
 
+    # what the walk could not take, named: a silent skip is a file that
+    # never gets sorted and an inbox that can never report itself empty
+    skips = [f"IGNORED {path} <- {why}" for path, why in ignored]
     write_json_atomic(os.path.join(bench, "routing.json"), entries)
     with open(os.path.join(log_dir, "collect.log"), "w", encoding="utf-8") as f:
         # the counts step 1 is judged on go in the log too: stdout scrolls
         # away, and re-running the script to see them is what the log avoids
         f.write(json.dumps(counts, ensure_ascii=False, indent=1) + "\n\n")
+        f.write("\n".join(skips) + ("\n\n" if skips else ""))
         f.write("\n".join(lines) + ("\n" if lines else ""))
     print(json.dumps(counts, ensure_ascii=False, indent=1))
+    for line in skips:
+        print(line)
     print(f"evidence -> {os.path.join(bench, 'routing.json')}", file=sys.stderr)
 
 
