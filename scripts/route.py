@@ -29,6 +29,9 @@ from fnmatch import fnmatch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract  # noqa: E402
+# the condition engine lives in extract.py: apply.py's trash probe runs the
+# SAME matcher, so there is exactly one notion of what a condition means
+from extract import COND, matches, sensitive_hit, _id_values, _squeeze  # noqa: E402
 from memory import (Memory, is_inside, nfc, norm, pass_id, require_config,  # noqa: E402
                     self_ingestion_guard, write_json_atomic)
 
@@ -44,67 +47,6 @@ FULL_AUDIT_CAP = 500
 
 
 # ------------------------------------------------------------ conditions ----
-def _squeeze(v):
-    return re.sub(r"[ .]", "", str(v))
-
-
-def _id_values(e):
-    return {_squeeze(v) for vals in (e.get("ids") or {}).values() for v in vals}
-
-
-def _text(e):
-    """The text as one normalised line — layout and accents are not evidence.
-
-    Cached per entry, since every condition of every rule asks for it.
-    """
-    if "_flat" not in e:
-        e["_flat"] = norm(e.get("text") or "")
-    return e["_flat"]
-
-
-_ext_in = lambda e, v: e.get("ext") in [str(x).lower() for x in v]  # noqa: E731
-
-COND = {
-    "text_contains_any": lambda e, v: any(norm(str(x)) in _text(e) for x in v),
-    "text_contains_all": lambda e, v: all(norm(str(x)) in _text(e) for x in v),
-    "text_matches": lambda e, v: bool(re.search(v, _text(e), re.I)),
-    "ids_any": lambda e, v: bool(_id_values(e) & {_squeeze(x) for x in v}),
-    "id_kind_present": lambda e, v: any(k in (e.get("ids") or {}) for k in v),
-    "has_text": lambda e, v: bool(e.get("text")) is bool(v),
-    "doc_year_in": lambda e, v: e.get("doc_year") in [int(x) for x in v],
-    "ext": _ext_in,
-    "ext_in": _ext_in,
-    "name_matches": lambda e, v: bool(re.search(v, norm(os.path.basename(e["path"])), re.I)),
-    "path_under": lambda e, v: any(fnmatch(norm("/" + e["_rel"].replace(os.sep, "/")),
-                                           norm((p if p.startswith(("/", "*")) else "*/" + p)
-                                                .rstrip("/") + "*"))
-                                   for p in v),
-    "size_gt": lambda e, v: e.get("size", 0) > int(v),
-    "size_lt": lambda e, v: e.get("size", 0) < int(v),
-}
-
-
-def matches(cond, e):
-    if not isinstance(cond, dict) or not cond:
-        return False           # an empty condition proves nothing about anything
-    for key, val in cond.items():
-        if key == "all":
-            if not all(matches(c, e) for c in val):
-                return False
-        elif key == "any":
-            if not any(matches(c, e) for c in val):
-                return False
-        elif key == "not":
-            if matches(val, e):
-                return False
-        elif key in COND:
-            if not COND[key](e, val):
-                return False
-        else:
-            return False
-    return True
-
-
 def match_strength(cond, e):
     """The strength of the evidence that actually fired. 0 when nothing matched.
 
@@ -154,25 +96,6 @@ def cheap_match(cond, e):
 
 
 # ---------------------------------------------------------------- guards ----
-def sensitive_hit(e, cfg):
-    """Which sensitive tripwire fired, named precisely enough to act on."""
-    s = cfg.get("sensitive") or {}
-    for key in ("text_contains_any", "name_matches", "path_under", "ext",
-                "ext_in", "id_kind_present"):
-        v = s.get(key)
-        if v is None or not COND[key](e, v):
-            continue
-        if isinstance(v, (list, tuple)):
-            for x in v:
-                if COND[key](e, [x]):
-                    return f"{key}: {x}"
-        return f"{key}: {v}"
-    for rule in s.get("rules", []):
-        if matches(rule, e):
-            return rule.get("id", "sensitive-rule")
-    return None
-
-
 def inbox_of(e, cfg):
     for ib in cfg.get("inboxes") or []:
         p = ib.get("path") if isinstance(ib, dict) else ib
@@ -363,13 +286,22 @@ def cmd_route(cfg):
     bench = os.path.join(cfg["workspace"], "bench")
     data, entries = load_routing(bench)
 
+    # The only way past the barrier is withdrawal: `decision: "unanswered"`
+    # with a reason listing every read attempt (render p1, Read on the
+    # original, --render on other pages, conversion). A withdrawn file is
+    # never triaged, never carries `lu`, and comes back FIRST next pass —
+    # the retry is the next pass, not a shrug.
     blocked = [e["path"] for e in entries
-               if e.get("needs_vision") and not (e.get("text") or "").strip()]
+               if e.get("needs_vision") and not (e.get("text") or "").strip()
+               and e.get("decision") != "unanswered"]
     if blocked:
         print("vision barrier — no judgement on unread bytes; still unread:",
               file=sys.stderr)
         for p in blocked:
             print("  " + p, file=sys.stderr)
+        print("read them (render, Read, --render, conversion) or withdraw them:"
+              ' decision "unanswered" with the attempts in `reason`',
+              file=sys.stderr)
         sys.exit(2)
 
     unknown = {r.get("id"): r.get("status") for r in cfg.get("rules") or []
@@ -379,7 +311,11 @@ def cmd_route(cfg):
               "         expected shadow or active", file=sys.stderr)
 
     counts, by_rule, by_shadow = {t: 0 for t in TRIAGE}, {}, {}
+    withdrawn = 0
     for e in entries:
+        if e.get("decision") == "unanswered":
+            withdrawn += 1          # withdrawn, unread: no triage on no evidence
+            continue
         cols = route_entry(e, cfg)
         for k in ("_flat", "_rel", "_entity"):
             e.pop(k, None)
@@ -391,6 +327,7 @@ def cmd_route(cfg):
             by_shadow[s["rule"]] = by_shadow.get(s["rule"], 0) + 1
     write_json_atomic(os.path.join(bench, "routing.json"), data)
     print(json.dumps({"entries": len(entries), "triage": counts,
+                      "withdrawn": withdrawn,
                       "by_rule": by_rule, "by_shadow": by_shadow,
                       "routing": os.path.join(bench, "routing.json")},
                      ensure_ascii=False, indent=1))
@@ -709,8 +646,10 @@ def archive_bench(ws, pass_name):
 def cmd_learn(cfg):
     ws = cfg["workspace"]
     data, entries = load_routing(os.path.join(ws, "bench"))
-    if any("triage" not in e for e in entries):
-        sys.exit("routing.json has entries without a triage — run route.py first")
+    if any("triage" not in e and e.get("decision") != "unanswered"
+           for e in entries):
+        sys.exit("routing.json has entries without a triage — run route.py first"
+                 " (withdrawn entries are the one exception)")
     mem = Memory(root=cfg["root"])
     pass_name = pass_of(entries, mem, cfg)
     cfg_path = os.path.join(ws, "config.yaml")
@@ -742,7 +681,10 @@ def cmd_learn(cfg):
         mem.append(mem.record(
             e["path"], pass_id=pass_name,
             triage=e.get("triage") or "residual", decision="unanswered",
-            reason=e.get("why") or "reached the end of the pass without a decision",
+            # a withdrawal carries its read attempts in `reason` — archived
+            # here so the next pass knows what was already tried
+            reason=e.get("reason") or e.get("why")
+            or "reached the end of the pass without a decision",
             size=e.get("size"), mtime=e.get("mtime"), md5=e.get("md5"),
             provenance="pass"))
 

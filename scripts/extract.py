@@ -19,9 +19,10 @@ import subprocess
 import sys
 import zipfile
 from datetime import datetime
+from fnmatch import fnmatch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from memory import flatten  # noqa: E402
+from memory import flatten, norm  # noqa: E402
 
 TEXT_EXT = {".txt", ".md", ".csv", ".tsv", ".log", ".json", ".xml", ".html", ".htm",
             ".js", ".py", ".sh", ".yml", ".yaml", ".webloc", ".plist", ".css",
@@ -33,7 +34,11 @@ ZIP_XML = {".docx": r"word/document\.xml", ".odt": r"content\.xml",
            ".pptx": r"ppt/slides/slide\d+\.xml", ".xlsx": r"xl/sharedStrings\.xml"}
 
 BUILTIN_IDS = {
-    "iban": r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}\b",
+    # A French IBAN printed in groups of four ends on a 3-char tail
+    # ("… 8130 050"): a groups-of-exactly-four pattern silently truncates it
+    # and the mod-97 check then rejects a perfectly valid IBAN. Same shape as
+    # config.example.yaml's pattern; the checksum does the real filtering.
+    "iban": r"\b[A-Z]{2}\d{2}[ ]?[\dA-Z][\dA-Z ]{10,30}\b",
     "email": r"\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b",
 }
 # What a name means when the config declares no `validate:` of its own.
@@ -325,3 +330,93 @@ def doc_year(dates):
     years = [int(m.group()) for m in RE_YEAR.finditer(" ".join(dates or []))]
     years = [y for y in years if 1900 <= y <= datetime.now().year + 1]
     return max(years) if years else None
+
+
+# ------------------------------------------------------- condition engine ----
+# One evaluator for every config condition — rules, entities, and above all
+# `sensitive:`. It lives in the library because two STEPS need it (route.py
+# for triage, apply.py for the trash probe) and steps may not import steps;
+# a second, smaller copy in apply.py is how v1's weakest matcher ended up
+# guarding the most sensitive files.
+
+def _squeeze(v):
+    return re.sub(r"[ .]", "", str(v))
+
+
+def _id_values(e):
+    return {_squeeze(v) for vals in (e.get("ids") or {}).values() for v in vals}
+
+
+def _text_of(e):
+    """The text as one normalised line — layout and accents are not evidence.
+
+    Cached per entry, since every condition of every rule asks for it.
+    """
+    if "_flat" not in e:
+        e["_flat"] = norm(e.get("text") or "")
+    return e["_flat"]
+
+
+_ext_in = lambda e, v: e.get("ext") in [str(x).lower() for x in v]  # noqa: E731
+
+COND = {
+    "text_contains_any": lambda e, v: any(norm(str(x)) in _text_of(e) for x in v),
+    "text_contains_all": lambda e, v: all(norm(str(x)) in _text_of(e) for x in v),
+    "text_matches": lambda e, v: bool(re.search(v, _text_of(e), re.I)),
+    "ids_any": lambda e, v: bool(_id_values(e) & {_squeeze(x) for x in v}),
+    "id_kind_present": lambda e, v: any(k in (e.get("ids") or {}) for k in v),
+    "has_text": lambda e, v: bool(e.get("text")) is bool(v),
+    "doc_year_in": lambda e, v: e.get("doc_year") in [int(x) for x in v],
+    "ext": _ext_in,
+    "ext_in": _ext_in,
+    "name_matches": lambda e, v: bool(re.search(v, norm(os.path.basename(e["path"])), re.I)),
+    "path_under": lambda e, v: any(fnmatch(norm("/" + e["_rel"].replace(os.sep, "/")),
+                                           norm((p if p.startswith(("/", "*")) else "*/" + p)
+                                                .rstrip("/") + "*"))
+                                   for p in v),
+    "size_gt": lambda e, v: e.get("size", 0) > int(v),
+    "size_lt": lambda e, v: e.get("size", 0) < int(v),
+}
+
+
+def matches(cond, e):
+    if not isinstance(cond, dict) or not cond:
+        return False           # an empty condition proves nothing about anything
+    for key, val in cond.items():
+        if key == "all":
+            if not all(matches(c, e) for c in val):
+                return False
+        elif key == "any":
+            if not any(matches(c, e) for c in val):
+                return False
+        elif key == "not":
+            if matches(val, e):
+                return False
+        elif key in COND:
+            if not COND[key](e, val):
+                return False
+        else:
+            return False
+    return True
+
+
+def sensitive_hit(e, cfg):
+    """Which sensitive tripwire fired, named precisely enough to act on.
+
+    Full grammar everywhere: the flat keys, and `rules:` entries with
+    all/any/not. The entry needs `path`, `_rel`, `ext`, `text`, `ids`."""
+    s = cfg.get("sensitive") or {}
+    for key in ("text_contains_any", "name_matches", "path_under", "ext",
+                "ext_in", "id_kind_present"):
+        v = s.get(key)
+        if v is None or not COND[key](e, v):
+            continue
+        if isinstance(v, (list, tuple)):
+            for x in v:
+                if COND[key](e, [x]):
+                    return f"{key}: {x}"
+        return f"{key}: {v}"
+    for rule in s.get("rules", []):
+        if matches(rule, e):
+            return rule.get("id", "sensitive-rule")
+    return None

@@ -38,13 +38,15 @@ Done when the counts in `bench/logs/collect.log` are numbers you can explain fro
 
 ## ② Vision
 
-An agent reads every `needs_vision` entry and fills `text` and `lu`: `"text"` (extracted layer sufficed) · `"render"` (read from the PNG) · `"pages N-M"` (escalated into the original). Escalation goes upward through readers, never around them: page-1 evidence → read targeted pages of the original (`Read`, or `collect.py --render <path> --pages A-B` where the harness cannot open it) → ask the user → record `unanswered`. No script ever interprets content.
+An agent reads every `needs_vision` entry and fills `text` and `lu`: `"text"` (extracted layer sufficed) · `"render"` (read from the PNG) · `"pages N-M"` (escalated into the original). Escalation goes upward through readers, never around them: page-1 render → read the original (`Read`, targeted pages) → `collect.py --render <path> --pages A-B` on other pages → convert (`sips`, or whatever the platform offers). No script ever interprets content.
 
-Done when no entry still has `needs_vision: true` with empty `text`.
+A file that survives every reader is **withdrawn**, and withdrawal is torn from you, not chosen: set `decision: "unanswered"` with a `reason` that names each attempt — `"tried: render p1, Read p1-2, sips — all failed"`. A withdrawal whose reason lists no attempts is laziness with a paper trail; the file comes back first next pass either way, so skipping the ladder buys nothing. `lu` is NEVER set on a file that was not read — it is a witness, not a checkbox.
+
+Done when every `needs_vision` entry has `text` filled, or a withdrawal whose `reason` lists the attempts.
 
 ## ③ Route
 
-`route.py` gives every entry a triage: `route` (a rule recognised it), `propose` (needs eyes — sensitive, duplicated, tied entities, inbox, weak evidence, unresolved destination), `residual` (nothing matched), `skip` (content already in memory). It exits 2, paths listed, while any entry is unread — no judgement on unread bytes. Shadow rules predict before guards, so guards never blind learning.
+`route.py` gives every entry a triage: `route` (a rule recognised it), `propose` (needs eyes — sensitive, duplicated, tied entities, inbox, weak evidence, unresolved destination), `residual` (nothing matched), `skip` (content already in memory). It exits 2, paths listed, while any entry is unread — no judgement on unread bytes. The one way past the barrier is a withdrawal from ②: those entries are counted `withdrawn`, get no triage columns, and wait for the next pass. Shadow rules predict before guards, so guards never blind learning.
 
 A document names several entities at once; the strongest evidence decides, config order decides nothing, and a tie goes to `propose`. An `inboxes:` file is always proposed, never silently routed. A destination variable that does not resolve ({doc_year} with no date) means the rule does not fire — never an `undated/` folder. All matching is accent- and case-insensitive.
 
@@ -60,7 +62,7 @@ Done when every entry has a decision, or a reason it does not that you can say o
 
 ## ⑤ Apply
 
-`apply.py` is dry-run by default: it prints every gesture and touches nothing. `--execute` once the printout matches intent — and the execution report must equal the dry-run report. Each successful action appends its memory line immediately and stamps `result`; a crash leaves both exactly at the interruption point, and `apply.py --resume` continues where `result` is missing. Trash goes to the OS bin (fallback `<workspace>/.trash/<pass>/`), collisions get `(2)`, nothing is clobbered. The sensitive probe trusts nothing from the bench: text and ids are re-extracted from the file itself. No `sensitive:` block in config → every trash is refused.
+`apply.py` is dry-run by default: it prints every gesture and touches nothing. `--execute` once the printout matches intent — and the execution report must equal the dry-run report. Each successful action appends its memory line immediately and stamps `result`; a crash leaves both exactly at the interruption point, and `apply.py --resume` continues where `result` is missing. Trash goes to the OS bin (fallback `<workspace>/.trash/<pass>/`), collisions get `(2)`, nothing is clobbered. The sensitive probe trusts nothing from the bench: text and ids are re-extracted from the file itself, and extractor debris does not count as a reading — a non-trivial file whose re-read yields no language is kept until `reviewed: "vision"`. No `sensitive:` block in config → every trash is refused.
 
 Done when dry-run and execution report the same counts and `failed` is 0.
 

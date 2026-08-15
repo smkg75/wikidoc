@@ -23,14 +23,12 @@ Usage: apply.py [--execute] [--resume]
 """
 import json
 import os
-import re
 import shutil
 import sys
-from fnmatch import fnmatch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract  # noqa: E402
-from memory import (Memory, file_md5, is_inside, nfc, norm, pass_id,  # noqa: E402
+from memory import (Memory, file_md5, is_inside, nfc, pass_id,  # noqa: E402
                     require_config, self_ingestion_guard, write_json_atomic)
 
 MINIMAL = os.environ.get("WIKIDOC_MINIMAL") == "1"
@@ -132,42 +130,13 @@ def own_text(path, ext):
         return None
 
 
-SENSITIVE_KEYS = ("text_contains_any", "name_matches", "path_under", "ext_in",
-                  "id_kind_present")
-
-
-def _sens_key(key, val, probe):
-    if key == "text_contains_any":
-        return any(norm(str(x)) in probe["text"] for x in val)
-    if key == "name_matches":
-        return bool(re.search(val, probe["name"], re.I))
-    if key == "path_under":
-        rel = "/" + probe["rel"].replace(os.sep, "/")
-        return any(fnmatch(rel, (p if p.startswith(("/", "*")) else "*/" + p)
-                   .rstrip("/") + "*") for p in val)
-    if key == "ext_in":
-        return probe["ext"] in [str(x).lower() for x in val]
-    if key == "id_kind_present":
-        return any(k in probe["ids"] for k in val)
-    return False
-
-
-def sensitive_hit(probe, cfg):
-    """Which sensitive test the file trips, judged only on re-read evidence.
-
-    Taking routing.json's word for the contents would make the protection only
-    as strong as the working file: a trash entry written without a `text`
-    column would silently disable every content-based test.
-    """
-    s = cfg.get("sensitive") or {}
-    for key in SENSITIVE_KEYS:
-        if key in s and _sens_key(key, s[key], probe):
-            return key
-    for rule in s.get("rules", []):
-        keys = [k for k in rule if k in SENSITIVE_KEYS]
-        if keys and all(_sens_key(k, rule[k], probe) for k in keys):
-            return rule.get("id", "sensitive-rule")
-    return None
+# The matcher itself is extract.sensitive_hit — the SAME engine route.py
+# triages with, full all/any/not grammar included. A local, smaller copy here
+# is how v1's weakest matcher ended up guarding the most sensitive files.
+# What stays local is the stance: the probe feeds it only evidence re-read
+# from disk. Taking routing.json's word for the contents would make the
+# protection only as strong as the working file — a trash entry written
+# without a `text` column would silently disable every content-based test.
 
 
 # ---------------------------------------------------------------- main ------
@@ -183,7 +152,18 @@ def main():
         data = json.load(f)
     entries = data if isinstance(data, list) else data.get("entries", [])
     mem = Memory(root=root)
-    pass_name = (data.get("pass") if isinstance(data, dict) else None) or pass_id(mem)
+    # The pass's identity is fixed the first time apply touches this bench:
+    # a --resume must record under the SAME pass, not mint pass N+1 because
+    # memory already holds the first half's lines.
+    marker = os.path.join(cfg["workspace"], "bench", "pass")
+    pass_name = (data.get("pass") if isinstance(data, dict) else None)
+    if not pass_name and os.path.exists(marker):
+        with open(marker, encoding="utf-8") as f:
+            pass_name = f.read().strip() or None
+    if not pass_name:
+        pass_name = pass_id(mem)
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write(pass_name)
     guards = self_ingestion_guard(cfg)
 
     done, failed = [], []
@@ -259,10 +239,14 @@ def main():
                 failed.append((raw, str(err))); continue
             if not execute:
                 done.append((decision, raw, final)); memory_lines += 1; continue
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.move(src, dst)
+            # already exactly there: a no-op, not a gesture — moving a file
+            # onto itself must not turn a green dry-run into a red execute
+            same = os.path.realpath(dst) == os.path.realpath(src)
+            if not same:
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.move(src, dst)
             st2 = stat_or_none(dst)             # re-stat: proof, not intent
-            if not st2 or os.path.lexists(src):
+            if not st2 or (not same and os.path.lexists(src)):
                 failed.append((raw, "move not confirmed at destination")); continue
             rec["size"], rec["mtime"] = st2.st_size, int(st2.st_mtime)
             enrich(dst, e.get("desc"), e.get("tags"), e, cfg)
@@ -275,16 +259,21 @@ def main():
                 failed.append((raw, "config declares no `sensitive:` — "
                                     "nothing is binned until it does")); continue
             text = own_text(src, ext)
-            if not text and st.st_size > 1024 and e.get("reviewed") != "vision":
-                failed.append((raw, "no text re-extracted from a non-trivial "
-                                    "file — kept until reviewed with vision")); continue
+            # Debris is not a reading: a binary .doc hands the text fallback
+            # replacement-char soup — non-empty, so the old emptiness test
+            # believed it had read the file. Language or nothing.
+            readable = bool(text) and extract.looks_like_prose(text)
+            if not readable and st.st_size > 1024 and e.get("reviewed") != "vision":
+                failed.append((raw, "no readable text re-extracted from a "
+                                    "non-trivial file (empty or extractor "
+                                    "debris) — kept until reviewed with vision")); continue
             try:
                 ids = extract.extract_ids(text or "", cfg) or {}
             except Exception:
                 failed.append((raw, "id re-extraction failed — kept")); continue
-            hit = sensitive_hit({"text": norm(text or ""), "rel": rel_src,
-                                 "name": os.path.basename(src), "ext": ext,
-                                 "ids": ids}, cfg)
+            hit = extract.sensitive_hit({"path": src, "_rel": rel_src,
+                                         "text": text or "", "ext": ext,
+                                         "ids": ids, "size": st.st_size}, cfg)
             if hit:
                 failed.append((raw, f"sensitive ({hit}) — kept")); continue
             try:
