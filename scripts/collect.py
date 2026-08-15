@@ -124,7 +124,12 @@ def walk_select(cfg, mem, limit, md5s):
                     continue
                 size, mtime = st.st_size, int(st.st_mtime)
                 counts["scanned"] += 1
-                sizes.setdefault(size, []).append(p)
+                if not os.path.islink(p):
+                    # a link is never a duplicate candidate — neither its own
+                    # (it carries the target's size and md5), nor its target's:
+                    # leaving it in `sizes` marks the ORIGINAL as a duplicate
+                    # of its own pointer
+                    sizes.setdefault(size, []).append(p)
                 inbox = next((disp for disp, ap in inboxes if is_inside(p, ap)),
                              None)
                 rec = mem.by_path.get(key)
@@ -186,6 +191,20 @@ def prep_entry(cfg, path, size, mtime, ws, render_dir, idx, md5s):
          "md5": hashed(path, size, md5s),
          "text": "", "truncated": False, "prose": False,
          "needs_vision": False, "ids": {}}
+    if os.path.islink(path):
+        # A symlink is a POINTER, not a document. os.stat follows it, so its
+        # size and md5 are the target's — which makes every link look like a
+        # byte-identical duplicate of the file it points at, and a dedup rule
+        # would bin the link. Some corpora file deliberately in links (an
+        # archived mail-out that must not duplicate the originals); binning
+        # those destroys the structure. So: no hash, no duplicate group, no
+        # vision, no reading. It gets a memory line and stops being work.
+        # (a link whose target is gone never reaches here: the walk's stat
+        # fails and it comes back as `ignored: dangling symlink`)
+        e["md5"] = None
+        e["opaque"] = "symlink"
+        e["link_to"] = nfc(os.path.realpath(path))
+        return e
     if e["md5"] is None and size < (1 << 30):     # past 1 GB md5 is skipped,
         e["error"] = "unreadable"                 # below it None means EPERM
     if ext == ".pdf":

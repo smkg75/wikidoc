@@ -215,6 +215,16 @@ and the inbox reports `candidates: 0, remaining: 0`, which reads "inbox
 clean" — a `policy: empty` promise that can never be checked. Counter-test:
 the same inbox under `root` must not be scanned twice.
 
+**A symlink is not a duplicate of its target** — pinned v2 bug (first real
+batch): put a symlink next to the file it points at, both inside the corpus.
+Correct: the link comes back `opaque: "symlink"` with `link_to`, `md5: null`,
+NO `duplicate_of`, no `needs_vision`; route sends it residual naming the
+target; a `none` decision retires it. Wrong (the shipped bug): `os.stat`
+follows the link, so the link carries the target's size and md5 and is
+grouped as a byte-identical duplicate — and a dedup decision bins the link.
+On a real corpus that meant 24 links of an archived mail-out (built as links
+precisely so the originals are not duplicated) all proposed for the bin.
+
 **A refused walk is not an empty corpus** — pinned v2 bug (first production
 pass): `chmod 000` the root (or point `root:` at a path that does not exist)
 with a non-empty `memory.jsonl`. Correct: collect exits non-zero, names the

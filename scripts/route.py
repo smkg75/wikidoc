@@ -257,6 +257,10 @@ def route_entry(e, cfg):
         return cols
 
     cols["triage"] = "residual"
+    if e.get("link_to"):
+        cols["why"] = ("symlink -> %s — a pointer, not a document"
+                       % rel_key(e["link_to"], cfg["root"]))
+        return cols
     cols["why"] = (e.get("error") or e.get("opaque") or "no text to reason on"
                    if not (e.get("text") or "").strip() else "no rule matched")
     return cols

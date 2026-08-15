@@ -202,6 +202,17 @@ duplicate grouping and the `known_as` md5 match. `known_as` is only set
 while the recorded copy still exists on disk — a `why` never cites a path
 that no longer resolves.
 
+**Symlinks are pointers, never documents.** `followlinks=False` stops the
+walk descending into a linked directory but still lists linked FILES, and
+`os.stat` follows them — so a link carries its target's size and md5 and
+lands as a byte-identical duplicate of the very file it points at. A corpus
+may file deliberately in links (an archived mail-out that must not duplicate
+its originals); a dedup decision would bin exactly those. So a symlink gets
+`md5: null`, `opaque: "symlink"`, `link_to` (resolved target) and
+`link_broken`, no duplicate group, no `needs_vision`, no reading — route
+sends it residual naming the target, a `none` decision gives it a memory
+line, and it stops being work.
+
 Writes `bench/routing.json` (evidence columns) + `bench/renders/` +
 `bench/logs/collect.log` (counts mirrored on stdout). Entries the walk
 cannot take (dangling symlinks, unstatable files) are counted (`ignored`)
