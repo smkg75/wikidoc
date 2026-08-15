@@ -258,11 +258,18 @@ default in every mode.
 
 ## Known, assumed limits (not bugs — do not "fix")
 
-**Sensitive duplicates are irreducible.** Two byte-identical copies of a
-sensitive document both hit the duplicate AND sensitive guards (`propose`),
-and a trash decision on either is refused by apply's probe — the sensitive
-refusal has no override, `reviewed: "vision"` only lifts the unreadable-text
-refusal. So both copies live until the user removes one by hand (or a `move`
-files them apart). This is the guard doing its job: the tool never bins
-sensitive content on its own judgement, and the price is that it cannot
-deduplicate it either. A grader must not count the surviving pair as a miss.
+**Deduplicating a sensitive document needs a proven survivor.** Two
+byte-identical copies of a sensitive file both hit the duplicate AND sensitive
+guards (`propose`). Correct: a trash with no `keeper` is REFUSED; a trash whose
+`keeper` names the other copy goes through, and apply re-reads BOTH files from
+disk at that moment. Each of these must still be refused: keeper missing,
+keeper equal to the source, keeper differing by a single byte, keeper itself
+decided `trash` in the same bench. The guard protects the CONTENT, never the
+copy count — refusing outright is what shipped first, and it left a legal file
+in triplicate forever.
+
+**A shadow rule may not act.** Give a `status: shadow` rule a `when` that
+matches half the corpus and a `destination`. Correct: it appears only in the
+`shadow` column and in `by_shadow`; no entry gets triage `route` from it and no
+`destination` is written. route.py exits with a BUG message if a non-active
+rule ever reaches the routing columns.
