@@ -141,6 +141,12 @@ def reindex(paths):
 # ------------------------------------------------------------------- api ---
 def enrich(path, desc=None, tags=None, meta=None, tag_colors=None):
     """One call per file. Returns what landed; raises nothing."""
+    if tag_colors:      # warn, never fail: a tag outside the config taxonomy
+        for t in tags or []:
+            name = nfc(str(t).split("\n")[0])
+            if name not in tag_colors:
+                print(f"warning: tag {name!r} is not in the config tag taxonomy",
+                      file=sys.stderr)
     if not (_libc and os.path.exists(path)):
         return {}
     out = {}

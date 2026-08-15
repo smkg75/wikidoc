@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""Step ① — choose the pass's files, read their evidence.
+
+Selection has no cursor and no xattr: memory.jsonl IS the seen-set. A file is
+a candidate when memory has no line for its path, when its (size, mtime)
+changed and the content really is new (same md5 = a touch or a copy back, not
+new work), or when its last decision is `unanswered`. Unanswered files come
+back FIRST, then whatever sits in the inboxes, then the rest — in sorted walk
+order, so two runs over the same disk pick the same batch.
+
+Evidence, per file: page-1 text truncated at ~4000 chars (`truncated` flag),
+page count, validated identifiers and dates, byte-identical duplicates by
+(size, md5) with no size threshold and no group cap — the thresholds were
+exactly where v1's misses lived. No readable text and more than 1 KiB of
+bytes → `needs_vision` plus a page-1 PNG; at 1 KiB or less → opaque
+"no-content".
+
+Writes bench/routing.json (evidence columns only, atomic), bench/renders/,
+bench/logs/collect.log — counts mirrored on stdout. Interpretation belongs to
+the agents downstream; this script only converts bytes.
+
+Usage:
+    collect.py [N]                        select and extract a batch
+                                          (default batch_size, else 500)
+    collect.py --render PATH --pages A-B  on-demand page renders for an agent
+                                          whose harness cannot read the file
+
+Nothing imports collect.py.
+"""
+import argparse
+import json
+import os
+import re
+import sys
+from fnmatch import fnmatch
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from memory import (Memory, file_md5, flatten, is_inside, nfc,  # noqa: E402
+                    require_config, self_ingestion_guard)
+import extract  # noqa: E402
+
+TEXT_CAP = 4000
+OPAQUE_MAX = 1024          # no text and this few bytes: nothing to see either
+
+TEXT_EXT = {".txt", ".md", ".csv", ".tsv", ".log", ".json", ".xml", ".html",
+            ".htm", ".js", ".py", ".sh", ".yml", ".yaml", ".webloc", ".plist",
+            ".css", ".less", ".scss", ".ts", ".tsx", ".jsx", ".sql", ".toml",
+            ".ini", ".conf", ".svg", ".vcf", ".ics", ".eml"}
+IMG_EXT = {".png", ".jpg", ".jpeg", ".heic", ".heif", ".gif", ".webp", ".tif",
+           ".tiff", ".bmp"}
+OFFICE_EXT = {".docx", ".odt", ".pptx", ".xlsx"}
+GATED_EXT = {".pdf"} | OFFICE_EXT   # extractor-mediated: debris can pass for text
+
+
+# ------------------------------------------------------------- selection ----
+def excluded(rel, patterns):
+    rel = "/" + rel.replace(os.sep, "/")
+    return any(fnmatch(rel, p if p.startswith(("/", "*")) else "*/" + p)
+               for p in patterns)
+
+
+def inbox_dirs(cfg):
+    out = []
+    for i in cfg.get("inboxes", []):
+        p = os.path.expanduser(i.get("path", "") if isinstance(i, dict) else i)
+        if p and not os.path.isabs(p):
+            p = os.path.join(cfg["root"], p)
+        if p:
+            out.append(p)
+    return out
+
+
+def hashed(path, size, md5s):
+    """One md5 per path per pass — selection, dedup and the entry share it."""
+    if path not in md5s:
+        md5s[path] = file_md5(path, size)
+    return md5s[path]
+
+
+def walk_select(cfg, mem, limit, md5s):
+    """Candidates in (priority, walk-order), plus sizes of the whole corpus.
+
+    Sizes of everything scanned come back too: duplicate detection needs the
+    whole disk, not just the batch. Only stat-drifted files are hashed here —
+    that is what keeps a pass over tens of thousands of files cheap.
+    """
+    root, guards = cfg["root"], self_ingestion_guard(cfg)
+    excl = cfg.get("exclude", [])
+    inboxes = inbox_dirs(cfg)
+    sizes, cands = {}, []
+    counts = {"scanned": 0, "seen": 0}
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        if any(is_inside(dirpath, g) for g in guards):
+            dirnames[:] = []
+            continue
+        rel_dir = os.path.relpath(dirpath, root)
+        dirnames[:] = sorted(d for d in dirnames
+                             if not excluded(os.path.join(rel_dir, d), excl))
+        for fn in sorted(filenames):
+            if fn == ".DS_Store":
+                continue
+            p = os.path.join(dirpath, fn)
+            rel = nfc(os.path.relpath(p, root))
+            if excluded(rel, excl):
+                continue
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue        # dangling symlink, or vanished mid-walk
+            size, mtime = st.st_size, int(st.st_mtime)
+            counts["scanned"] += 1
+            sizes.setdefault(size, []).append(p)
+            rec = mem.by_path.get(rel)
+            if rec is not None and rec.get("decision") == "unanswered":
+                cands.append((0, p, size, mtime))     # re-selected first
+                continue
+            if rec is not None and (rec.get("size"), rec.get("mtime")) == (size, mtime):
+                counts["seen"] += 1
+                continue
+            if rec is not None:
+                # stat drifted: re-check the content before calling it new —
+                # same md5 is a touch, not new work
+                if hashed(p, size, md5s) == rec.get("md5"):
+                    counts["seen"] += 1
+                    continue
+            cands.append((1 if any(is_inside(p, i) for i in inboxes) else 2,
+                          p, size, mtime))
+    cands.sort(key=lambda c: c[0])      # stable: walk order within each band
+    counts["candidates"] = len(cands)
+    return cands[:limit], sizes, counts
+
+
+# ------------------------------------------------------------ extraction ----
+def page1_text(path, ext):
+    """First-page text, or None when no extractor reads this format.
+
+    None means "not read" (minimal mode, no reader); "" means "read and
+    empty". Both feed the same needs_vision gate, but the distinction must
+    survive extract.py — an unread PDF must never pass for an empty one.
+    """
+    if ext == ".pdf":
+        return extract.pdf_text(path)
+    if ext in OFFICE_EXT:
+        return extract.zip_text(path, extract.ZIP_XML[ext])
+    if ext == ".rtf":
+        return extract.rtf_text(path)
+    if ext in IMG_EXT:
+        return None
+    if ext in TEXT_EXT or extract.looks_textual(path):
+        return extract.read_text_file(path)
+    return None
+
+
+def prep_entry(cfg, path, size, mtime, ws, render_dir, idx, md5s):
+    ext = os.path.splitext(path)[1].lower()
+    e = {"path": path, "size": size, "mtime": mtime, "ext": ext or "?",
+         "md5": hashed(path, size, md5s),
+         "text": "", "truncated": False, "prose": False,
+         "needs_vision": False, "ids": {}}
+    if e["md5"] is None and size < (1 << 30):     # past 1 GB md5 is skipped,
+        e["error"] = "unreadable"                 # below it None means EPERM
+    if ext == ".pdf":
+        n = extract.pdf_pages(path)
+        if n is not None:
+            e["pages"] = n
+    raw = page1_text(path, ext)
+    prose = bool(raw) and extract.looks_like_prose(raw)
+    if raw and ext in GATED_EXT and not prose:
+        raw = ""        # a broken font yields characters, not language
+    if raw:
+        e["prose"] = prose
+        e["truncated"] = len(raw) > TEXT_CAP
+        e["text"] = raw[:TEXT_CAP]
+        flat = flatten(raw)
+        ids = extract.extract_ids(flat, cfg)
+        if ids:
+            e["ids"] = ids
+        dates = extract.extract_dates(flat)
+        if dates:
+            e["dates"] = dates
+            year = extract.doc_year(dates)
+            if year:
+                e["doc_year"] = year
+    elif size > OPAQUE_MAX:
+        e["needs_vision"] = True
+        out = os.path.join(render_dir, f"{idx:04d}-p1.png")
+        ok = (extract.pdf_render(path, out) if ext == ".pdf"
+              else extract.image_render(path, out) if ext in IMG_EXT
+              else False)
+        if ok:
+            e["render"] = os.path.relpath(out, ws)
+    else:
+        e["opaque"] = "no-content"
+    return e
+
+
+# ------------------------------------------------------------------ main ----
+def write_atomic(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def render_verb(cfg, path, pages):
+    """On-demand renders for an escalating agent. The READER is the agent —
+    this verb only converts pages to pixels."""
+    path = os.path.abspath(os.path.expanduser(path))
+    if not os.path.exists(path):
+        sys.exit(f"no such file: {path}")
+    render_dir = os.path.join(cfg["workspace"], "bench", "renders")
+    os.makedirs(render_dir, exist_ok=True)
+    m = re.fullmatch(r"(\d+)(?:-(\d+))?", pages or "1")
+    if not m:
+        sys.exit("--pages wants A-B or N (1-based)")
+    first, last = int(m.group(1)), int(m.group(2) or m.group(1))
+    ext = os.path.splitext(path)[1].lower()
+    stem = re.sub(r"[^\w-]+", "-",
+                  os.path.splitext(os.path.basename(path))[0])[:40] or "page"
+    done = []
+    for page in range(first, last + 1):
+        out = os.path.join(render_dir, f"{stem}-p{page}.png")
+        ok = (extract.pdf_render(path, out, page=page) if ext == ".pdf"
+              else extract.image_render(path, out))
+        if ok:
+            done.append(out)
+            print(out)
+        if ext != ".pdf":
+            break               # an image has one page
+    if not done:
+        sys.exit(f"no render produced for {path}")
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="step 1: choose the pass's files, read their evidence")
+    ap.add_argument("limit", nargs="?", type=int,
+                    help="batch size (default: batch_size from config, else 500)")
+    ap.add_argument("--render", metavar="PATH",
+                    help="render pages of one file and exit")
+    ap.add_argument("--pages", metavar="A-B", default="1",
+                    help="page range for --render (1-based, default 1)")
+    args = ap.parse_args()
+
+    cfg = require_config()
+    if args.render:
+        render_verb(cfg, args.render, args.pages)
+        return
+
+    mem = Memory(root=cfg["root"])
+    limit = args.limit if args.limit is not None else int(cfg.get("batch_size", 500))
+    ws = cfg["workspace"]
+    bench = os.path.join(ws, "bench")
+    render_dir, log_dir = os.path.join(bench, "renders"), os.path.join(bench, "logs")
+    for d in (render_dir, log_dir):
+        os.makedirs(d, exist_ok=True)
+
+    md5s = {}
+    picked, sizes, counts = walk_select(cfg, mem, limit, md5s)
+    counts.update(selected=len(picked),
+                  unanswered=sum(1 for c in picked if c[0] == 0),
+                  inbox=sum(1 for c in picked if c[0] == 1),
+                  with_text=0, needs_vision=0, opaque=0,
+                  duplicates=0, known_content=0, errors=0)
+
+    entries, lines = [], []
+    root = cfg["root"]
+    for idx, (_, p, size, mtime) in enumerate(picked, 1):
+        e = prep_entry(cfg, p, size, mtime, ws, render_dir, idx, md5s)
+
+        # identity is (size, md5) — every size twin gets hashed, no threshold,
+        # no group cap: a 200-byte duplicate is still a duplicate
+        if e["md5"]:
+            twins = [q for q in sizes.get(size, [])
+                     if q != p and hashed(q, size, md5s) == e["md5"]]
+            if twins:
+                e["duplicate_of"] = twins
+                counts["duplicates"] += 1
+            # same content already recorded under another name: a move,
+            # not new work — route.py will triage it `skip`
+            prev = mem.seen_md5(e["md5"])
+            if isinstance(prev, list):
+                prev = prev[-1] if prev else None
+            if prev and prev.get("path") != nfc(os.path.relpath(p, root)):
+                e["known_as"] = prev.get("path")
+                if prev.get("desc"):
+                    e["known_desc"] = prev.get("desc")
+                counts["known_content"] += 1
+
+        counts["with_text"] += bool(e["text"])
+        counts["needs_vision"] += e["needs_vision"]
+        counts["opaque"] += "opaque" in e
+        counts["errors"] += "error" in e
+        entries.append(e)
+        lines.append(f"{nfc(p)} ext={e['ext']} text={len(e['text'])}c"
+                     + (" TRUNC" if e["truncated"] else "")
+                     + (" VISION" if e["needs_vision"] else "")
+                     + (f" render={e['render']}" if e.get("render") else "")
+                     + (f" ids={','.join(e['ids'])}" if e["ids"] else "")
+                     + (f" dup={len(e['duplicate_of'])}" if e.get("duplicate_of") else "")
+                     + (f" known_as={e['known_as']}" if e.get("known_as") else "")
+                     + (f" opaque={e['opaque']}" if e.get("opaque") else "")
+                     + (f" ERROR={e['error']}" if e.get("error") else ""))
+
+    write_atomic(os.path.join(bench, "routing.json"), entries)
+    with open(os.path.join(log_dir, "collect.log"), "w", encoding="utf-8") as f:
+        # the counts step 1 is judged on go in the log too: stdout scrolls
+        # away, and re-running the script to see them is what the log avoids
+        f.write(json.dumps(counts, ensure_ascii=False, indent=1) + "\n\n")
+        f.write("\n".join(lines) + ("\n" if lines else ""))
+    print(json.dumps(counts, ensure_ascii=False, indent=1))
+    print(f"evidence -> {os.path.join(bench, 'routing.json')}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
