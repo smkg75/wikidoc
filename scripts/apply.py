@@ -222,6 +222,17 @@ def surviving_twin(entry, src, cfg, also_binned=()):
     Anything unreadable, moved or altered since the pass was planned fails the
     check, because both hashes are taken fresh.
     """
+    kp = keeper_path(entry, cfg, src, also_binned)
+    if not kp:
+        return None
+    h_src, h_keep = file_md5(src), file_md5(kp)
+    if not h_src or h_src != h_keep:
+        return None
+    return kp
+
+
+def keeper_path(entry, cfg, src, also_binned=()):
+    """The named keeper, if it is a real, distinct, surviving file."""
     keeper = entry.get("keeper")
     if not keeper:
         return None
@@ -235,10 +246,47 @@ def surviving_twin(entry, src, cfg, also_binned=()):
         return None                      # a file is not its own survivor
     if os.path.realpath(kp) in also_binned:
         return None                      # nor is a file this pass is also binning
-    h_src, h_keep = file_md5(src), file_md5(kp)
-    if not h_src or h_src != h_keep:
-        return None
     return kp
+
+
+def superseded_by(entry, src, src_entry, cfg, also_binned=()):
+    """The keeper that REPLACES this one, when the config says the family works
+    that way — a later edition of a document that is reissued unchanged but for
+    its date.
+
+    An attestation de droits, a justificatif de domicile, a re-downloaded RIB:
+    the issuer regenerates them on demand, so ten copies differ in bytes and in
+    date while saying the same thing, and only the last one is worth keeping.
+    Byte-equality can never prove that — the bytes differ on purpose — so the
+    `keeper` proof does not apply and the sensitive guard would keep the pile
+    forever.
+
+    The authority here is `sensitive: supersedable:` in config.yaml, i.e. the
+    USER's standing rule, never the agent's reading of the moment. Both files
+    must match the SAME declared family, evidence re-read from disk. The tool
+    still never decides on its own that a document is replaceable; it only
+    carries out a family the user wrote down.
+    """
+    families = (cfg.get("sensitive") or {}).get("supersedable") or []
+    if not families:
+        return None
+    kp = keeper_path(entry, cfg, src, also_binned)
+    if not kp:
+        return None
+    k_ext = os.path.splitext(kp)[1].lower()
+    k_text = own_text(kp, k_ext) or ""
+    try:
+        k_ids = extract.extract_ids(k_text, cfg) or {}
+    except Exception:
+        return None
+    k_entry = {"path": kp, "_rel": nfc(os.path.relpath(kp, cfg["root"])),
+               "text": k_text, "ext": k_ext, "ids": k_ids,
+               "size": os.path.getsize(kp)}
+    for fam in families:
+        cond = {k: v for k, v in fam.items() if k != "id"}
+        if extract.matches(cond, src_entry) and extract.matches(cond, k_entry):
+            return kp, fam.get("id", "supersedable")
+    return None
 
 
 # ---------------------------------------------------------------- main ------
@@ -402,15 +450,22 @@ def main():
                 ids = extract.extract_ids(text or "", cfg) or {}
             except Exception:
                 refused.append((raw, "id re-extraction failed — kept")); continue
-            hit = extract.sensitive_hit({"path": src, "_rel": rel_src,
-                                         "text": text or "", "ext": ext,
-                                         "ids": ids, "size": st.st_size}, cfg)
-            if hit and not twin:
+            probe_entry = {"path": src, "_rel": rel_src, "text": text or "",
+                           "ext": ext, "ids": ids, "size": st.st_size}
+            hit = extract.sensitive_hit(probe_entry, cfg)
+            older = (superseded_by(e, src, probe_entry, cfg, binned_here)
+                     if hit and not twin else None)
+            if hit and not twin and not older:
                 refused.append((raw, f"sensitive ({hit}) — kept")); continue
             if twin:
                 base["reason"] = (base["reason"] or "") + \
                     " — binned only because %s keeps the same bytes" \
                     % nfc(mem.rel(twin))
+            elif older:
+                kp, fam = older
+                base["reason"] = (base["reason"] or "") + \
+                    " — superseded edition (%s), replaced by %s" \
+                    % (fam, nfc(mem.rel(kp)))
             try:
                 rec = mem.record(**{**base, "path": rel_src,
                                     "md5": file_md5(src, st.st_size),
