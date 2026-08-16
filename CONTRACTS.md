@@ -24,6 +24,40 @@ Three **libraries** (nouns, imported, never steps):
 Scripts convert bytes and move files; they never interpret. Interpretation —
 reading a document, writing a desc, deciding — belongs to agents.
 
+## The scripts are optional; the record is not
+
+The pipeline is a convenience, never the authority. Its whole value is that it
+hashes without mistakes, walks without forgetting, writes atomically, and keeps
+hundreds of files out of the conversation's context. What a document *is*,
+where it belongs and why, is decided by the agent that reads it. When a script
+contradicts what the agent read in the file, the file wins and the script is
+the thing to fix.
+
+It follows that **a pass may legitimately be done by hand** — because the job
+is small, because the situation is odd, because the user asked for exactly
+this. An agent moving, renaming or binning files directly is doing the steps'
+job and owes the steps' record:
+
+- every gesture ends with its `memory.jsonl` line, built with
+  `Memory.record(...)` and appended exactly as `apply.py` would;
+- `provenance: "human-decision"` when the judgement came from a human or from
+  a reading made outside a pass; `triage: "propose"`, because a human
+  judgement is the strongest evidence there is;
+- `reason` says WHY, not what — the path already says what;
+- the line is written AFTER the move is re-stat'ed at its destination, and the
+  same guards still apply: keeper proved at the moment of the gesture, nothing
+  sensitive binned unread, removal to the OS bin.
+
+A file moved without its memory line is worse than a file left alone: it looks
+sorted, and the next `collect.py` selects it as new. The reading, the
+arbitration and the user's answer are lost, and nothing records that they ever
+happened. Verify by reloading `Memory` from disk and walking the destination:
+zero files without a line.
+
+The one file that may legitimately have no line is one whose destination is
+undecided — its absence from memory IS the open question, and it belongs in
+`wiki/state.md`.
+
 ## Vocabulary
 
 - **triage** — where a file lands after route.py: `route` (a rule recognised
