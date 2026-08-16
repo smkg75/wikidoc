@@ -371,6 +371,35 @@ printed `REFUSE`; only a broken entry is `failed` and only `failed` sets the
 exit code. They were one counter until SKILL.md's "done when `failed` is 0"
 started teaching agents that a working guard is a problem to route around.
 
+**Debris is not text, and a title is not debris.** `looks_like_prose` decides
+whether an extractor returned language or its own wreckage, and it was wrong in
+both directions on a 4 395-PDF audit: 32 bank statements of `/UNIC0037/UNIC0035…`
+passed as prose (the word test read "UNIC" as a plausible word, thousands of
+times) while 73 of the 98 texts it refused were legitimate — 66 of them because a
+title has fewer than four words. It now strips glyph names (`/UNIC00xx`,
+`cid:114`, `/uni00A0`) before judging and refuses only when they drown the text,
+closes letter-spacing before counting words, allows five consonants in a row
+(`inscription`, `prescription` — French contracts), and reads case sprayed
+through a token rather than any capital mid-word (`ÅÁgkIYIr` is debris,
+`IdentitéBancaire` is a word extraction glued). No repetition test: a real
+invoice repeats `mission` in 39 % of its words.
+
+**A guard must survive damaged extraction.** Two things reach the text before a
+condition does — `norm()` folds typographic apostrophes and dashes (a
+`sensitive:` line reading `relevé d'identité bancaire` met `Relevé d’Identité
+Bancaire` and said nothing), and `text_contains_any/all` compare a second time
+with every space removed (4,2 % of real PDFs come back glued). `extract_ids`
+harvests twice: as extracted, then with a space restored at each lower→upper
+transition, because `BankIdentiferCodeFR9120041…` hides an IBAN from every
+`\b`-anchored pattern. On a real RIB those three together turn one accidental
+`path_under` hit into two independent guards.
+
+**`None` is not `""`, in every reader.** `zip_text` and `rtf_text` returned ""
+on any exception, so a corrupt `.docx`, an `.xlsx` written with inline strings
+(no `xl/sharedStrings.xml`) and a missing `striprtf` were indistinguishable from
+an empty document — a 40 000-character export filed as blank. Readers return
+None for "could not read"; only a real emptiness is "".
+
 **A refusal is recorded, and it is not a withdrawal.** apply writes the
 memory line itself — `decision: "refused"`, `reason` naming the decision it
 refused and the guard that stopped it — and stamps `result: "refused"`.

@@ -279,6 +279,28 @@ shipped bug): no line at all from apply, so `--learn` wrote
 refusal both vanished, and the ledger claimed nobody could read a file that
 had been read and judged.
 
+**Extractor debris passes for text** — pinned v2 bug (extract audit, 4 395 real
+PDFs): plant a file whose page-1 text is `/UNIC0037/UNIC0035/UNIC0030…` repeated,
+and one whose text is a three-word title. Correct: the debris is refused (glyph
+names stripped, and refused outright when they drown the text) so the file goes
+to `needs_vision` and someone finally looks at it; the title is KEPT. Wrong (the
+shipped bug): 32 bank statements filed as "has text" — no id, no date, no
+sensitive hit, no render, judgeable on their filename alone — while 66 legitimate
+titles were thrown away for having fewer than four words. Counter-tests that must
+stay green: a real invoice repeating one word in 39 % of its tokens is prose; an
+invoice carrying a few `/uni00A0` is prose; `C o n t r a i n t e s` is prose;
+`inscription`/`prescription` are words; `ÅÁgkIYIr` is not.
+
+**A guard must survive damaged extraction** — pinned v2 bug (same audit): write
+a `sensitive:` line as a human writes it (`relevé d'identité bancaire`) and feed
+it a PDF whose text comes back `Relevé d’IdentitéBancaire` with a glued
+`BankIdentiferCodeFR91…`. Correct: the tripwire fires (typographic apostrophe
+folded by `norm()`, and a second comparison with every space removed) AND the
+IBAN is harvested (ids are also mined from a copy with a space restored at each
+lower→upper transition). Wrong (the shipped bug): neither fired, and the only
+thing standing between a RIB and an automatic gesture was a `path_under:` entry
+that happened to cover the folder it was sitting in.
+
 ## Known, assumed limits (not bugs — do not "fix")
 
 **Deduplicating a sensitive document needs a proven survivor.** Two

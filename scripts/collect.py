@@ -244,6 +244,10 @@ def prep_entry(cfg, path, size, mtime, ws, render_dir, idx, md5s):
         out = os.path.join(render_dir, f"{idx:04d}-p1.png")
         ok = (extract.pdf_render(path, out) if ext == ".pdf"
               else extract.image_render(path, out) if ext in extract.IMG_EXT
+              # .doc, .xls, .pages, .numbers…: no extractor here and no renderer
+              # of their own, so this is the difference between a vision step
+              # that can look and one that only has a filename
+              else extract.office_render(path, out) if ext in extract.QL_EXT
               else False)
         if ok:
             e["render"] = os.path.relpath(out, ws)

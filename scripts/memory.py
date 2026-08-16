@@ -40,13 +40,23 @@ def nfc(s):
     return unicodedata.normalize("NFC", s)
 
 
+TYPOGRAPHIC = str.maketrans({"’": "'", "‘": "'", "ʼ": "'",
+                             "“": '"', "”": '"', "–": "-",
+                             "—": "-", " ": " "})
+
+
 def norm(s):
     """THE one text normaliser. Every text comparison in the codebase goes
-    through it: NFC -> casefold -> strip combining marks -> collapse
-    whitespace. macOS spells `é` two ways and users type it zero ways; a
-    pattern that matches "reçu" must also match "RECU" and "reçu".
+    through it: NFC -> fold typography -> casefold -> strip combining marks ->
+    collapse whitespace. macOS spells `é` two ways and users type it zero ways;
+    a pattern that matches "reçu" must also match "RECU" and "reçu".
+
+    Typography is folded because nobody types the characters Word and macOS
+    substitute: a `sensitive:` line reading "relevé d'identité bancaire" met
+    "Relevé d’Identité Bancaire" on a real RIB and did not fire — U+2019 is not
+    U+0027, and the guard that should have stopped the file said nothing.
     """
-    s = nfc(s or "").casefold()
+    s = nfc(s or "").translate(TYPOGRAPHIC).casefold()
     s = "".join(c for c in unicodedata.normalize("NFD", s)
                 if not unicodedata.combining(c))
     return re.sub(r"\s+", " ", s).strip()

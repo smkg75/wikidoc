@@ -352,7 +352,7 @@ def cmd_route(cfg):
         if cols["rule"] and cols["rule"] not in active_ids:
             sys.exit("BUG: rule %r is not active but reached the routing "
                      "columns — a shadow rule must never act" % cols["rule"])
-        for k in ("_flat", "_rel", "_entity"):
+        for k in ("_flat", "_glued", "_rel", "_entity"):
             e.pop(k, None)
         e.update(cols)
         counts[cols["triage"]] += 1

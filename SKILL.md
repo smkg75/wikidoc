@@ -34,13 +34,17 @@ One entry per selected file; each actor writes only its columns; empty columns a
 
 `collect.py` selects the pass — `memory.jsonl` is the seen-set. A file is a candidate when it has no memory line, its (size, mtime) changed with new content, or its last decision was `unanswered` or `refused`. Order: those two first, then `inboxes:` files, then the rest; take `batch_size` (default 500).
 
-The walk starts at `root` **and at every inbox that lives outside it** — Desktop and Downloads are outside the document tree on most machines, and an inbox is a walk root, not merely a priority band. Their files are keyed `~/Desktop/…` in memory; everything under `root` stays root-relative. What could not be walked is named — a refused directory is reported `IGNORED`, and an unreadable walk root, or a scan of zero files against a non-empty memory, ends the pass with an error. "I could not look" is never reported as "there was nothing". Extraction is page 1 only, ~4000 chars; no text and size > 1 KiB → `needs_vision`, with a page-1 PNG in `bench/renders/` for PDFs and images — other formats reach ② renderless and climb its ladder. Byte-identical duplicates are grouped with no size threshold. A symlink is a pointer, not a document: `opaque: "symlink"` with its `link_to`, never hashed, never grouped as a duplicate of its own target, never read — a corpus may file deliberately in links, and dedup would bin them. Its memory key is its own name, never the target's: keys resolve the parent directory, never the final component, or a link and its target would share one line and one of the two would be lost.
+The walk starts at `root` **and at every inbox that lives outside it** — Desktop and Downloads are outside the document tree on most machines, and an inbox is a walk root, not merely a priority band. Their files are keyed `~/Desktop/…` in memory; everything under `root` stays root-relative. What could not be walked is named — a refused directory is reported `IGNORED`, and an unreadable walk root, or a scan of zero files against a non-empty memory, ends the pass with an error. "I could not look" is never reported as "there was nothing". Extraction is page 1 only, ~4000 chars; no text and size > 1 KiB → `needs_vision`, with a page-1 PNG in `bench/renders/` for PDFs, images, and the office formats Quick Look draws (`.doc`, `.xls`, `.ppt`, `.pages`, `.numbers`…) — other formats reach ② renderless and climb its ladder. Text that comes back as glyph names or mojibake is not text: it is dropped, and the file goes to vision like any unread one. An extractor's debris filed as content is a document nobody ever reads. Byte-identical duplicates are grouped with no size threshold. A symlink is a pointer, not a document: `opaque: "symlink"` with its `link_to`, never hashed, never grouped as a duplicate of its own target, never read — a corpus may file deliberately in links, and dedup would bin them. Its memory key is its own name, never the target's: keys resolve the parent directory, never the final component, or a link and its target would share one line and one of the two would be lost.
 
 Done when the counts in `bench/logs/collect.log` are numbers you can explain from the corpus, and every `needs_vision` PDF and image has a render.
 
-## ② Vision
+## ② Vision — in a subagent, always
 
-An agent reads every `needs_vision` entry and fills `text` and `lu`: `"text"` (extracted layer sufficed) · `"render"` (read from the PNG) · `"pages N-M"` (escalated into the original). Escalation goes upward through readers, never around them: page-1 render → read the original (`Read`, targeted pages) → `collect.py --render <path> --pages A-B` on other pages → convert (`sips`, or whatever the platform offers). No script ever interprets content.
+**Delegate this step. You never open a render yourself.** A pass carries hundreds of `needs_vision` entries; opening their images in the conversation that also holds the config, the ledger and the decisions is how a pass dies of its own context halfway through. Spawn a subagent per file, or per small batch of files from the same folder, and give it exactly one job: look, and come back with words.
+
+What the subagent is handed: the paths, their renders, and the ladder below. What it returns: for each entry, the `text` it read and the `lu` that says how — nothing else. No image, no base64, no "here is what I saw" gallery. You write the columns from its report.
+
+Each entry gets `text` and `lu`: `"text"` (extracted layer sufficed) · `"render"` (read from the PNG) · `"pages N-M"` (escalated into the original). Escalation goes upward through readers, never around them: page-1 render → read the original (`Read`, targeted pages) → `collect.py --render <path> --pages A-B` on other pages → convert (`sips`, `qlmanage -t`, or whatever the platform offers). No script ever interprets content.
 
 A file that survives every reader is **withdrawn**, and withdrawal is torn from you, not chosen: set `decision: "unanswered"` with a `reason` that names each attempt — `"tried: render p1, Read p1-2, sips — all failed"`. A withdrawal whose reason lists no attempts is laziness with a paper trail; the file comes back first next pass either way, so skipping the ladder buys nothing. `lu` is NEVER set on a file that was not read — it is a witness, not a checkbox.
 
@@ -48,7 +52,7 @@ A file that survives every reader is **withdrawn**, and withdrawal is torn from 
 
 Containers (`.zip`, `.tar`, …) are never `needs_vision` — nothing renders them: collect marks them `opaque: "container"`, they reach ④ as residuals, and an agent that opens one to read its listing records `lu: "container"`.
 
-Done when every `needs_vision` entry has `text` filled, or a withdrawal whose `reason` lists the attempts.
+Done when every `needs_vision` entry has `text` filled, or a withdrawal whose `reason` lists the attempts — and when not one render reached this conversation.
 
 ## ③ Route
 

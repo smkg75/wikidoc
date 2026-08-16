@@ -31,7 +31,15 @@ TEXT_EXT = {".txt", ".md", ".csv", ".tsv", ".log", ".json", ".xml", ".html", ".h
 IMG_EXT = {".png", ".jpg", ".jpeg", ".heic", ".heif", ".gif", ".webp", ".tif",
            ".tiff", ".bmp"}
 ZIP_XML = {".docx": r"word/document\.xml", ".odt": r"content\.xml",
-           ".pptx": r"ppt/slides/slide\d+\.xml", ".xlsx": r"xl/sharedStrings\.xml"}
+           ".pptx": r"ppt/slides/slide\d+\.xml", ".xlsx": r"xl/sharedStrings\.xml",
+           # a template is the same zip as its document, and failed only
+           # because this table matched the extension instead of the contents
+           ".dotx": r"word/document\.xml", ".xltx": r"xl/sharedStrings\.xml",
+           ".potx": r"ppt/slides/slide\d+\.xml", ".ott": r"content\.xml"}
+# Formats with no extractor here and no renderer of their own: Quick Look draws
+# page 1 so the vision step has something to look at.
+QL_EXT = {".doc", ".xls", ".ppt", ".pages", ".numbers", ".key", ".epub",
+          ".xlsm", ".pptm", ".ods", ".dot", ".wpd"}
 # Non-office containers: no extractor reads them and no renderer draws them,
 # so `needs_vision` would be a promise nothing can keep. collect.py marks them
 # `opaque: "container"` — residual lane; the decide agent opens one if it wants.
@@ -76,6 +84,10 @@ def clean(s):
 
 VOWELS = "aeiouyàâäéèêëïîôöùûüœæ"
 
+# Glyph names and character ids: what a PDF hands back instead of text when its
+# font has no usable encoding. `/UNIC0037`, `/32 /33 /29`, `cid:114`, `/g143`.
+RE_GLYPH = re.compile(r"/(?:UNIC|uni|[A-Za-z]{0,3})[0-9A-Fa-f]{2,6}\b|\bcid:\d+")
+
 
 def looks_like_prose(text):
     """Is this language, or is it the extractor's debris?
@@ -86,22 +98,52 @@ def looks_like_prose(text):
     real content is never read by anyone. That is how a lease gets classified
     on nothing at all.
 
-    Counting letters does not separate them: mojibake is mostly letters.
-    Counting plausible *words* does — a word has a vowel and does not stack
-    four consonants in a row.
+    Four signals, because one is always wrong somewhere. The audit of 4 395 real
+    PDFs that produced them: 32 bank statements of `/UNIC0037/UNIC0035…` were
+    called prose (the regex read "UNIC" as a plausible word, over and over), and
+    73 of the 98 texts refused were legitimate — 66 of them for the sole crime
+    of being a title with fewer than four words.
     """
-    words = re.findall(r"[^\W\d_]{3,}", text or "", re.UNICODE)
-    if len(words) < 4:
+    t = flatten(text or "")
+    if not t:
         return False
+    # 1. glyph names are not words in any language. Drowning in them is debris;
+    #    a handful of them (`/uni00A0` for a non-breaking space) is an ordinary
+    #    invoice, and leaving them in would let "uni" vote as a word.
+    glyph = RE_GLYPH.findall(t)
+    if glyph:
+        if sum(len(g) for g in glyph) / len(t) > 0.3:
+            return False
+        t = RE_GLYPH.sub(" ", t)
+    # 2. letter-spaced exports — `C o n t r a i n t e s`, and the invoices some
+    #    PDF producers emit — carry real words and no tokens at all. Close the
+    #    gaps and judge the text underneath.
+    toks = t.split(" ")
+    if len(toks) >= 8 and sum(1 for w in toks if len(w) == 1) / len(toks) > 0.5:
+        t = t.replace(" ", "")
+    words = re.findall(r"[^\W\d_]{3,}", t, re.UNICODE)
+    if not words:
+        return False
+    # There is no repetition test here on purpose: a real invoice repeats
+    # `mission` in 39 % of its words, and counting that as debris refused it.
+    # What repeats in extractor debris is a glyph name, and rule 1 has it.
+    #
+    # 3. word by word. Five consonants, not four: `construction`, `inscription`
+    #    and `prescription` stack four, and refusing French contracts was the
+    #    single largest source of wrong refusals.
     plausible = 0
     for w in words:
         low = w.casefold()
         if not any(c in VOWELS for c in low):
             continue                                   # no vowel, no word
-        if re.search(rf"[^{VOWELS}\W\d_]{{4,}}", low, re.UNICODE):
-            continue                                   # four consonants in a row
-        if re.search(r"[^\W\d_A-ZÀ-Þ][A-ZÀ-Þ]", w):
-            continue        # a capital mid-word: `ÅÁgkIYIr`, not a word
+        if re.search(rf"[^{VOWELS}\W\d_]{{5,}}", low, re.UNICODE):
+            continue                                   # five consonants in a row
+        body = w[1:]
+        if body and not w.isupper() \
+                and sum(1 for c in body if c.isupper()) / len(body) > 0.4:
+            continue        # case sprayed through the token: `ÅÁgkIYIr`. One
+                            # capital mid-word is CamelCase — a form the glued
+                            # text of a form takes, and still a word.
         plausible += 1
     return plausible / len(words) >= 0.6
 
@@ -129,24 +171,33 @@ def read_text_file(path):
 
 def zip_text(path, pattern, cap=3):
     """Text of the XML members matching `pattern` — covers docx/odt/pptx/xlsx
-    via the ZIP_XML table."""
+    via the ZIP_XML table. None = could not read, "" = read and empty.
+
+    The distinction is the whole point: an `.xlsx` written with inline strings
+    has no `xl/sharedStrings.xml`, a corrupt `.docx` raises, and returning ""
+    for either filed a 40 000-character export as an empty document. No member
+    matched is a genuine emptiness; an exception is not.
+    """
     try:
         with zipfile.ZipFile(path) as z:
             names = sorted(n for n in z.namelist() if re.fullmatch(pattern, n))[:cap]
+            if not names:
+                return None            # the part we know how to read is absent
             return clean(" ".join(
                 re.sub(r"<[^>]+>", " ", z.read(n).decode("utf-8", "replace"))
                 for n in names))
     except Exception:
-        return ""
+        return None
 
 
 def rtf_text(path):
+    """None when striprtf is missing or the file will not parse — never ""."""
     try:
         from striprtf.striprtf import rtf_to_text
         with open(path, encoding="utf-8", errors="replace") as f:
             return clean(rtf_to_text(f.read(200000)))
     except Exception:
-        return ""
+        return None
 
 
 # ------------------------------------------------------------------- pdf ----
@@ -229,6 +280,35 @@ def pdf_render(path, out_png, page=1):
         return False
 
 
+def office_render(path, out_png):
+    """Page 1 of a document nothing here can parse, via Quick Look.
+
+    `.doc`, `.xls`, `.ppt`, `.pages`, `.numbers`, `.key`, `.epub` have no
+    extractor in this library and no renderer either, so `needs_vision` on them
+    was a promise nothing could keep: 93 real documents in one corpus reached
+    the vision step with no text and no image, and the agent had nothing but a
+    filename to judge. qlmanage draws what the Finder draws — 0,4 s, page one,
+    macOS only, no dependency. False on anything but a confirmed file.
+    """
+    if sys.platform != "darwin":
+        return False
+    out_dir = os.path.dirname(out_png) or "."
+    made = os.path.join(out_dir, os.path.basename(path) + ".png")
+    try:
+        subprocess.run(["qlmanage", "-t", "-s", "1600", "-o", out_dir, path],
+                       capture_output=True, timeout=40)
+    except Exception:
+        return False
+    if not os.path.exists(made):
+        return False
+    if os.path.realpath(made) != os.path.realpath(out_png):
+        try:
+            os.replace(made, out_png)
+        except OSError:
+            return False
+    return os.path.exists(out_png)
+
+
 def image_render(path, out_png):
     """HEIC and friends to PNG via `sips`. Best effort, macOS only — anything
     but a confirmed output file is False. -Z bounds the long side so a phone
@@ -300,7 +380,31 @@ def extract_ids(text, cfg):
             patterns.append((name, re.compile(pattern), _CHECKS.get(check)))
     patterns.sort(key=lambda t: -len(t[1].pattern))
 
-    out, rest = {}, flatten(text or "")
+    # Twice: as extracted, then with the spaces extraction ate put back. The
+    # second pass finds nothing new on clean text and costs one regex sweep.
+    flat = flatten(text or "")
+    out = {}
+    for rest in (flat, _deglue(flat)):
+        for name, values in _harvest(patterns, rest).items():
+            kept = out.setdefault(name, [])
+            for v in values:
+                if v not in kept:
+                    kept.append(v)
+        out = {k: v[:5] for k, v in out.items()}
+    return out
+
+
+def _deglue(text):
+    """Put a space back where extraction ate one: a lowercase letter followed
+    by a capital. `BankIdentiferCodeFR9120041…` hides an IBAN from every
+    pattern anchored on `\\b`, and on a real RIB that is the difference between
+    a guarded document and an unguarded one. Text without case transitions —
+    a SIREN in justified text — comes back untouched."""
+    return re.sub(r"(?<=[a-zà-öø-ÿ])(?=[A-ZÀ-ÖØ-Þ])", " ", text)
+
+
+def _harvest(patterns, rest):
+    out = {}
     for name, rx, check in patterns:
         found, spans = [], []
         for m in rx.finditer(rest):
@@ -362,11 +466,31 @@ def _text_of(e):
     return e["_flat"]
 
 
+def _glued_of(e):
+    """The same text with every space removed — the last resort of a match.
+
+    Extraction loses spaces: 4,2 % of the PDFs in a real corpus come back as
+    `Relevéd'IdentitéBancaire`, and a `sensitive:` line written the way a human
+    writes it then matches nothing. Comparing both sides without spaces costs
+    one substring test and returns the guard its teeth. It is deliberately
+    generous: a false positive on a guard sends a file to the propose lane, a
+    false negative sends a RIB wherever a filename suggests.
+    """
+    if "_glued" not in e:
+        e["_glued"] = _text_of(e).replace(" ", "")
+    return e["_glued"]
+
+
+def _says(e, needle):
+    n = norm(str(needle))
+    return n in _text_of(e) or n.replace(" ", "") in _glued_of(e)
+
+
 _ext_in = lambda e, v: e.get("ext") in [str(x).lower() for x in v]  # noqa: E731
 
 COND = {
-    "text_contains_any": lambda e, v: any(norm(str(x)) in _text_of(e) for x in v),
-    "text_contains_all": lambda e, v: all(norm(str(x)) in _text_of(e) for x in v),
+    "text_contains_any": lambda e, v: any(_says(e, x) for x in v),
+    "text_contains_all": lambda e, v: all(_says(e, x) for x in v),
     "text_matches": lambda e, v: bool(re.search(v, _text_of(e), re.I)),
     "ids_any": lambda e, v: bool(_id_values(e) & {_squeeze(x) for x in v}),
     "id_kind_present": lambda e, v: any(k in (e.get("ids") or {}) for k in v),
