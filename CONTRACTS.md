@@ -66,7 +66,9 @@ Shared helpers, owned here, imported by everyone — names are LAW:
 combining marks → collapse whitespace; every text comparison in the codebase
 goes through it), `flatten(s)`, `file_md5(path, size)` (None on unreadable),
 `is_inside(path, root)`, `rel_key(path, root)` (THE memory key — collect,
-route and apply must agree or a file is filed twice), `inbox_dirs(cfg)`,
+route and apply must agree or a file is filed twice; it resolves the PARENT
+directory and never the final component, so a symlink keeps a key of its own
+instead of colliding with its target's), `inbox_dirs(cfg)`,
 `pass_roots(cfg)` (root + every inbox outside it: the directories a pass
 walks, and the directories apply accepts a source from), `workspace()`,
 `skill_dir()`, `self_ingestion_guard(cfg)`, `load_config()`,
@@ -368,6 +370,16 @@ unreadable text on a trash, no `sensitive:` block — is counted `refused` and
 printed `REFUSE`; only a broken entry is `failed` and only `failed` sets the
 exit code. They were one counter until SKILL.md's "done when `failed` is 0"
 started teaching agents that a working guard is a problem to route around.
+
+**A refusal is recorded, and it is not a withdrawal.** apply writes the
+memory line itself — `decision: "refused"`, `reason` naming the decision it
+refused and the guard that stopped it — and stamps `result: "refused"`.
+`--learn` therefore leaves it out of `unanswered` and lists it under
+`refused`; collect re-selects it in the same first band as a withdrawal,
+because the file is still unfiled. Recording it as `unanswered` (what shipped
+first) erased both the decision and the guard: the next pass met a file that
+looked as if nobody had ever read it, and proposed the same refused gesture
+again.
 
 ## config.example.yaml
 

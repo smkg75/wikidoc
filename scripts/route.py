@@ -743,6 +743,13 @@ def cmd_learn(cfg):
             size=e.get("size"), mtime=e.get("mtime"), md5=e.get("md5"),
             provenance="pass"))
 
+    # A guard that kept a file is not a file nobody could read: apply wrote it
+    # `refused` and stamped the entry, so it is out of `unanswered` above and
+    # named here on its own — with what it was, the next pass re-selects it
+    # first all the same.
+    stopped = [nfc(rel_to_root(e["path"], cfg)) for e in entries
+               if e.get("result") == "refused"]
+
     warnings = check_anchors(cfg)
     archived = archive_bench(ws, pass_name)
 
@@ -751,6 +758,7 @@ def cmd_learn(cfg):
                       "born": [r["id"] for r in born],
                       "ripe": [r["id"] for r in ripe],
                       "retire": retire, "unanswered": named,
+                      "refused": stopped,
                       "answered_withdrawals": answered,
                       "anchor_warnings": warnings, "archived": archived},
                      ensure_ascii=False, indent=1))
@@ -805,7 +813,7 @@ def cmd_audit(cfg, rid):
     matched = agreed = disagreed = unjudged = 0
     diverging = []
     for rp, rec in sorted(mem.by_path.items()):
-        if rec.get("decision") == "unanswered":
+        if rec.get("decision") in ("unanswered", "refused"):
             continue                      # no ground truth there yet
         e = audit_entry(rp, rec, cfg)
         if not match_strength(rule.get("when") or {}, e):

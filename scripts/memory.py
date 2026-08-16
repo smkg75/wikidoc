@@ -141,14 +141,25 @@ def rel_key(path, root):
     and it must be readable, stable across machines, and comparable. A `../`
     climb is none of those — `../Desktop/x.pdf` breaks the moment root moves
     and reads like a bug. Home-relative with a literal `~` does not.
+
+    The parent is resolved, the name is NOT: `realpath` on the whole path
+    resolves a final symlink, so a link and its target would share one key —
+    the link's record filed under the target's name, one of the two lost to
+    last-write-wins, and the link itself never seen (no line of its own, so
+    every pass re-selects it). collect.py already holds that a symlink is a
+    pointer and not a document; the ledger has to hold it too.
     """
     if not os.path.isabs(path):
         return nfc(path)             # already a key (apply.py's finals)
-    real = os.path.realpath(path)
-    if root and is_inside(real, root):
+    parent = os.path.realpath(os.path.dirname(path))
+    real = os.path.join(parent, os.path.basename(path))
+    # containment is asked of the PARENT: `is_inside` resolves symlinks by
+    # design (a link must not smuggle a write out of root), which would send a
+    # link sitting in root off to wherever it points.
+    if root and is_inside(parent, root):
         return nfc(os.path.relpath(real, os.path.realpath(root)))
     home = os.path.realpath(os.path.expanduser("~"))
-    if is_inside(real, home):
+    if is_inside(parent, home):
         return nfc(os.path.join("~", os.path.relpath(real, home)))
     return nfc(real)
 

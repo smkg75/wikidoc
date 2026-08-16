@@ -133,7 +133,12 @@ def walk_select(cfg, mem, limit, md5s):
                 inbox = next((disp for disp, ap in inboxes if is_inside(p, ap)),
                              None)
                 rec = mem.by_path.get(key)
-                if rec is not None and rec.get("decision") == "unanswered":
+                if rec is not None and rec.get("decision") in ("unanswered",
+                                                               "refused"):
+                    # `refused` rides the same band: a guard kept the file, so
+                    # it is still unfiled and must come back — but the ledger
+                    # says a decision WAS made and refused, not that nobody
+                    # could read it.
                     cands.append((0, p, size, mtime, inbox))  # re-selected first
                     continue
                 if rec is not None and (rec.get("size"), rec.get("mtime")) == (size, mtime):

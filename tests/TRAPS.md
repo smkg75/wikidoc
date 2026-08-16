@@ -256,6 +256,29 @@ memory line from this pass) is stamped `result` and reported `reconcile`; and
 was handled. Note `--resume` alone prints a dry-run — dry-run stays apply's
 default in every mode.
 
+**A symlink keeps a memory key of its own** — pinned v2 bug (second cold
+test): put a live symlink next to its target, both under `root`, and run a
+full pass. Correct: two memory lines, one per name; `stats` counts both;
+the next collect reports the link `seen`. Wrong (the shipped bug): `rel_key`
+called `realpath` on the whole path, so the link's record was filed under the
+TARGET's key — 46 entries produced 45 distinct files, the link had no line of
+its own (re-selected every pass, forever), and the two records fought over one
+key under last-write-wins. Counter-test: a symlinked intermediate DIRECTORY
+must still canonicalise (`lien-dossier/x.pdf` and `sub/x.pdf` are one file,
+one key), and a link inside `root` pointing outside it keeps a root-relative
+key.
+
+**A refusal is recorded as a refusal** — pinned v2 bug (second cold test):
+decide `trash` on a sensitive file with no `keeper`, run apply `--execute`,
+then `--learn`. Correct: apply writes the memory line (`decision: "refused"`,
+`reason` naming the refused decision and the guard) and stamps
+`result: "refused"`; `--learn` lists it under `refused`, NOT under
+`unanswered`; the next collect re-selects it in the first band. Wrong (the
+shipped bug): no line at all from apply, so `--learn` wrote
+`decision: "unanswered"` with the triage's `why` — the decision and the
+refusal both vanished, and the ledger claimed nobody could read a file that
+had been read and judged.
+
 ## Known, assumed limits (not bugs — do not "fix")
 
 **Deduplicating a sensitive document needs a proven survivor.** Two

@@ -334,6 +334,33 @@ def main():
         write_json_atomic(routing_path, data)
         done.append((kind, entry["path"], shown))
 
+    def refuse(entry, raw, why, base, rel):
+        """A guard kept the file — and that is a fact the ledger must carry.
+
+        Left unrecorded, a refusal reached --learn as `unanswered`: the file
+        came back looking unread, and both the decision that was made and the
+        guard that stopped it were gone. So the line says `refused`, names the
+        decision it refused and why, and collect re-selects it first — the
+        same band as a withdrawal, a different sentence in the record.
+        """
+        nonlocal memory_lines
+        refused.append((raw, why))
+        if base is None:
+            return                        # refused before the file was stat'ed
+        kw = {**base, "path": rel, "md5": None, "decision": "refused",
+              "reason": "%s refused: %s" % (base.get("decision"), why)}
+        try:
+            rec = mem.record(**kw)
+        except ValueError:                # a bad desc never costs the record
+            rec = mem.record(**{**kw, "desc": None})
+        memory_lines += 1
+        if not execute:
+            return
+        mem.append(rec)
+        entry["result"] = "refused"
+        entry["final"] = rel
+        write_json_atomic(routing_path, data)
+
     for e in entries:
         raw = e.get("path") or ""
         if resume and e.get("result"):
@@ -428,8 +455,8 @@ def main():
             # Nothing is binned until the config says what is protected: a
             # fresh install cannot lose a passport to a setting not yet written.
             if not cfg.get("sensitive"):
-                refused.append((raw, "config declares no `sensitive:` — "
-                                     "nothing is binned until it does")); continue
+                refuse(e, raw, "config declares no `sensitive:` — nothing is "
+                       "binned until it does", base, rel_src); continue
             # Checked first, from disk: a byte-identical copy that stays. It is
             # the one fact that makes binning this file lossless, so it is also
             # the one thing that can lift a refusal — both of them, since
@@ -443,20 +470,22 @@ def main():
             readable = bool(text) and extract.looks_like_prose(text)
             if not readable and st.st_size > 1024 and not twin \
                     and e.get("reviewed") != "vision":
-                refused.append((raw, "no readable text re-extracted from a "
-                                     "non-trivial file (empty or extractor "
-                                     "debris) — kept until reviewed with vision")); continue
+                refuse(e, raw, "no readable text re-extracted from a "
+                       "non-trivial file (empty or extractor debris) — "
+                       "kept until reviewed with vision", base, rel_src); continue
             try:
                 ids = extract.extract_ids(text or "", cfg) or {}
             except Exception:
-                refused.append((raw, "id re-extraction failed — kept")); continue
+                refuse(e, raw, "id re-extraction failed — kept", base,
+                       rel_src); continue
             probe_entry = {"path": src, "_rel": rel_src, "text": text or "",
                            "ext": ext, "ids": ids, "size": st.st_size}
             hit = extract.sensitive_hit(probe_entry, cfg)
             older = (superseded_by(e, src, probe_entry, cfg, binned_here)
                      if hit and not twin else None)
             if hit and not twin and not older:
-                refused.append((raw, f"sensitive ({hit}) — kept")); continue
+                refuse(e, raw, f"sensitive ({hit}) — kept", base, rel_src)
+                continue
             if twin:
                 base["reason"] = (base["reason"] or "") + \
                     " — binned only because %s keeps the same bytes" \
