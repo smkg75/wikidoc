@@ -104,3 +104,5 @@ Retired after 3 failed cycles, or 10 passes at 0 hits. A rule that keeps divergi
 ## The wiki
 
 `wiki/` holds what the corpus cannot say about itself: who is who, which entity was live in which period, which arbitration was made and why. `context.md` carries the durable facts; `state.md` carries what the next session must pick up. Start there.
+
+It is also written outside a pass, and outside this skill: a durable fact established while answering any question belongs in `wiki/` at that moment — `context.md`, `decisions.md`, `filing-patterns.md`, `trash-criteria.md`, `state.md` — with its line in `wiki/index.md` updated, surgically, section by section. A fact re-derived from the corpus for the third time is a wiki line that was never written. That writing is not a pass: it appends nothing to `memory.jsonl`, which records gestures on files alone.

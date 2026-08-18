@@ -126,6 +126,25 @@ Audit the user's instruction files (CLAUDE.md, AGENTS.md…). Two kinds of lines
 > Filing or searching personal documents → read `~/.wikidoc/wiki/context.md`.
 > A question about an entity's history → `~/.wikidoc/wiki/context.md`.
 
+Pointers alone make the wiki read-only, and a corpus that is only ever read
+goes stale. So the anchor also carries **one write rule**, and it says that the
+wiki is written **in any session, without invoking this skill**: a durable fact
+established by digging — an identifier, a surface, a correspondent, a
+reference amount, an arbitration — is written to `wiki/` the moment it
+surfaces, into `context.md` (durable facts), `decisions.md` (dated
+arbitrations), `filing-patterns.md` / `trash-criteria.md` (observed
+destinations and removal criteria) or `state.md` (what stayed unanswered),
+then its line in `wiki/index.md` is updated — a fact absent from the index is
+invisible. Writing is surgical: complete the existing section, never rewrite
+the file; contradicting sources are recorded WITH the contradiction and what
+settles it.
+
+What the rule must reserve to an invoked pass is the pass itself — collect /
+route / apply over files — and `memory.jsonl`, which records gestures on
+files only. Writing to the wiki opens no pass and appends no memory line;
+`state.md`'s open questions are asked at the start of a filing session, not in
+a session about something else.
+
 Back up the original to `<workspace>/legacy/` before touching it. Mechanically
 check every pointer — each backticked path must resolve. Show the user the full
 diff before writing anything.
