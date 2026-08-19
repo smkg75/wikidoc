@@ -673,10 +673,19 @@ def check_anchors(cfg):
                 continue                  # backticked code, not a path
             if re.search(r"[\s*?{$]", tok):
                 continue                  # globs and variables are not checkable
-            p = os.path.expanduser(tok)
-            if not os.path.isabs(p):
-                p = os.path.join(cfg["root"], p)
-            if not os.path.lexists(p):
+            if re.fullmatch(r"/[\w-]+", tok):
+                continue                  # a slash-command (`/wikidoc`), not a path
+            # A relative pointer is root-relative OR workspace-relative: the
+            # instruction files cite `wiki/state.md` and `config.yaml`, which
+            # live under the workspace, right next to `Perso/...`, which lives
+            # under root. Resolving against one only turns every pointer of the
+            # other into a false "no longer resolves" — and a warning that cries
+            # wolf on every run is a warning nobody reads.
+            cands = [os.path.expanduser(tok)]
+            if not os.path.isabs(cands[0]):
+                cands = [os.path.join(cfg["workspace"], tok),
+                         os.path.join(cfg["root"], tok)]
+            if not any(os.path.lexists(c) for c in cands):
                 warnings.append(f"{anchor}: `{tok}` no longer resolves")
     return warnings
 
