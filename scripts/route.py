@@ -198,7 +198,32 @@ def shadow_predictions(e, cfg):
 
 
 # ----------------------------------------------------------- default verb ----
-def route_entry(e, cfg):
+def settled_by_hand(e, cfg, mem):
+    """The hand-made decision that already put this file where it now sits.
+
+    `memory.jsonl` was only ever read back as a seen-set and a duplicate table:
+    a judgement went in and was forgotten, so the next pass re-derived it from
+    the same bytes and could land somewhere else. That is how an exception dies
+    — silently, by being out-reasoned. A file whose IBAN names a company is
+    claimed by that company at strength 3 and beats its own folder, which is
+    right for the company's bank orders and wrong for the invoice the company
+    sent to its owner as a private person.
+
+    So: when the last line for this exact path was made by a human and left the
+    file here, that reading outranks anything rules or entities can derive now.
+    It does not decide — it forbids deciding alone.
+    """
+    if mem is None:
+        return None
+    rec = mem.by_path.get(nfc(rel_key(e["path"], cfg["root"])))
+    if not rec or rec.get("provenance") != "human-decision":
+        return None
+    if rec.get("decision") not in ("none", "move", "rename"):
+        return None                # trash and refused are other conversations
+    return rec
+
+
+def route_entry(e, cfg, mem=None):
     """One file in, its triage columns out — with the reason on every branch."""
     e["_rel"] = rel_key(e["path"], cfg["root"])
     entity, rivals = entity_for(e, cfg)
@@ -212,6 +237,12 @@ def route_entry(e, cfg):
     if e.get("known_as"):
         checks.append(("skip", "skip",
                        f"same content already recorded as {e['known_as']}"))
+    prior = settled_by_hand(e, cfg, mem)
+    if prior:
+        why = (prior.get("reason") or "").strip().replace("\n", " ")
+        checks.append(("settled", "propose",
+                       f"already settled by hand in pass {prior.get('pass')}"
+                       + (f": {why[:400]}" if why else "")))
     hit = sensitive_hit(e, cfg)
     if hit:
         checks.append(("sensitive", "propose", f"sensitive ({hit})"))
@@ -291,6 +322,8 @@ def rel_dest(dest, cfg):
 def cmd_route(cfg):
     bench = os.path.join(cfg["workspace"], "bench")
     data, entries = load_routing(bench)
+    mem = Memory(root=cfg["root"])       # the ledger is an INPUT here, not only
+                                         # a seen-set: see settled_by_hand()
 
     # Two ways past the barrier. Withdrawal: `decision: "unanswered"` with a
     # reason listing every read attempt (render p1, Read on the original,
@@ -343,7 +376,7 @@ def cmd_route(cfg):
                       "strength": None, "destination": None, "shadow": []})
             counts["propose"] += 1
             continue
-        cols = route_entry(e, cfg)
+        cols = route_entry(e, cfg, mem)
         # A shadow rule OBSERVES. It may fill the `shadow` column and nothing
         # else — never a triage, never a destination, never a gesture. That is
         # what makes a candidate rule safe to leave running for months on a
