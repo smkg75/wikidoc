@@ -228,6 +228,46 @@ def file_md5(path, size=None):
         return None
 
 
+def dir_fingerprint(abs_dir, with_md5=False):
+    """Stat-level fingerprint of a subtree — the guard for `type: "dir"` lines.
+
+    Counts regular files under `abs_dir` (recursive, sorted walk), excluding
+    `.DS_Store` and symlinks (pointers, not documents — same law as collect).
+    Returns {"count", "total_size", "max_mtime"} and, with_md5, "tree_md5":
+    md5 of the sorted `relpath:md5` lines, NFC relpaths — content identity for
+    the whole subtree. Writer (compact.py) and checker (collect.py) MUST both
+    call this; two definitions of "the same subtree" is how a guard rots.
+    An unstatable file is skipped on both sides — symmetric, so it cannot
+    make a recorded fingerprint and a live one disagree.
+    """
+    count, total, maxm, entries = 0, 0, 0, []
+    for dp, dns, fns in os.walk(abs_dir, followlinks=False):
+        dns.sort()
+        for fn in sorted(fns):
+            if fn == ".DS_Store":
+                continue
+            p = os.path.join(dp, fn)
+            if os.path.islink(p):
+                continue
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            count += 1
+            total += st.st_size
+            maxm = max(maxm, int(st.st_mtime))
+            if with_md5:
+                entries.append((nfc(os.path.relpath(p, abs_dir)),
+                                file_md5(p, st.st_size) or ""))
+    fp = {"count": count, "total_size": total, "max_mtime": maxm}
+    if with_md5:
+        h = hashlib.md5()
+        for rel, md5 in sorted(entries):
+            h.update(f"{rel}:{md5}\n".encode())
+        fp["tree_md5"] = h.hexdigest()
+    return fp
+
+
 def pass_id(mem):
     """`YYYY-MM-DD-N` — N counts the passes already recorded today."""
     today = datetime.now().strftime("%Y-%m-%d")
@@ -255,6 +295,7 @@ class Memory:
         self.by_path = {}      # relpath -> last record, the primary index
         self.by_md5 = {}       # md5 -> [records], duplicates live at many paths
         self.by_stat = {}      # (relpath, size, mtime) -> md5, the no-hash fast path
+        self.dirs = {}         # relpath -> `type: "dir"` record: one line, whole subtree
         self.lines = 0
         self.load()
 
@@ -278,6 +319,13 @@ class Memory:
 
     def _index(self, rec):
         path = nfc(rec.get("path", ""))
+        if rec.get("type") == "dir":
+            # a whole subtree behind one line — homogeneous binary payloads
+            # (DICOM slices, exports) whose per-file lines would be 700 copies
+            # of the same reason. Indexed apart: it is not a file, and
+            # `distinct_files` must not count it.
+            self.dirs[path.rstrip("/")] = rec
+            return
         self.by_path[path] = rec
         md5 = rec.get("md5")
         if md5:
@@ -313,7 +361,7 @@ class Memory:
         if key in self.by_md5:
             return self.by_md5[key]
         key = nfc(key)
-        rec = self.by_path.get(key)
+        rec = self.by_path.get(key) or self.dirs.get(key.rstrip("/"))
         if rec:
             return rec
         for p, r in self.by_path.items():
@@ -390,6 +438,7 @@ def _cli():
             tri[r.get("triage")] = tri.get(r.get("triage"), 0) + 1
         print(json.dumps({"file": mem.path, "lines": mem.lines,
                           "distinct_files": len(mem.by_path),
+                          "dirs": {p: r.get("count") for p, r in mem.dirs.items()},
                           "with_desc": sum(1 for r in mem.by_path.values()
                                            if r.get("desc")),
                           "passes": dict(sorted(passes.items(),

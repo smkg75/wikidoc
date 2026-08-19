@@ -95,6 +95,33 @@ brought in — never a `../` climb, which breaks the moment root moves.
 secondary, one md5 may map to a LIST. `stats` reports
 `distinct_files = len(by_path)`.
 
+A second record kind, `type: "dir"`, puts a whole subtree behind ONE line —
+for **homogeneous binary payloads only** (DICOM slices, viewer exports, photo
+plates), where per-file lines are hundreds of copies of the same reason. A
+folder of heterogeneous documents stays line-per-file; that is where the
+granularity pays. The full decision text lives in the wiki (decisions.md) —
+the dir line's `reason` stays short and points there.
+
+```json
+{"type": "dir", "path": "Perso/Sante/…/2024-04-19 IRM cheville droite",
+ "pass": "…", "triage": "…", "decision": "…", "reason": "short — wiki has the rest",
+ "count": 697, "total_size": 76543210, "max_mtime": 1713545545,
+ "tree_md5": "…", "provenance": "…", "desc": "…", "tags": […], "date_doc": "…"}
+```
+
+Indexed in `Memory.dirs` (relpath → record), never in by_path — a dir is not
+a file and `distinct_files` must not count it. The fingerprint comes from
+`dir_fingerprint(abs_dir, with_md5)` — regular files only, `.DS_Store` and
+symlinks excluded, sorted walk; `tree_md5` hashes the sorted `relpath:md5`
+lines. Writer (`compact.py`) and checker (`collect.py`) both call it: two
+definitions of "the same subtree" is how a guard rots. Written by
+`scripts/compact.py`, the ONE writer allowed to rewrite memory.jsonl
+(append-only is the law of passes, not of maintenance): it refuses while any
+file under the dir is undecided, backs up first (unique name even twice in
+one second), rewrites atomically, appends the dir line, then re-verifies the
+fingerprint from a fresh load. `--keep` globs preserve the individual lines
+of text-bearing pieces so their md5s stay in by_md5 for dedup/known_as.
+
 Shared helpers, owned here, imported by everyone — names are LAW:
 `nfc(s)`, `norm(s)` (THE one text normaliser: NFC → casefold → strip
 combining marks → collapse whitespace; every text comparison in the codebase
@@ -224,6 +251,16 @@ line, OR its (size, mtime) changed (md5 re-checked: same content = moved,
 recorded as `known_as`; new content = candidate), OR its last decision is
 `unanswered`. Order: unanswered first, then files under `inboxes:` paths,
 then the rest. Take N (default `batch_size: 500`).
+
+A directory holding a `type: "dir"` line is checked as a UNIT: stat
+fingerprint (count, total_size, max_mtime) matches → the whole subtree is
+pruned (`seen += count`, `seen_dirs` counted), its files never stat'ed
+individually and never entered in the duplicate-size map. Stat drift →
+`tree_md5` decides, exactly like the per-file md5 re-check: identical
+content = touched, stays seen but named in the log ("re-run compact.py to
+refresh"); real drift = the subtree comes back as candidates (its files
+have no lines of their own — that is the deal) and the log says
+"dir line DIVERGED".
 
 Extraction: **page 1 only**, text truncated at ~4000 chars
 (`truncated: true`), page count kept. Non-office containers

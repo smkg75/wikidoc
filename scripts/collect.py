@@ -38,8 +38,8 @@ import sys
 from fnmatch import fnmatch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from memory import (Memory, file_md5, flatten, inbox_dirs,  # noqa: E402
-                    is_inside, nfc, pass_roots, require_config,
+from memory import (Memory, dir_fingerprint, file_md5, flatten,  # noqa: E402
+                    inbox_dirs, is_inside, nfc, pass_roots, require_config,
                     self_ingestion_guard, write_json_atomic)
 import extract  # noqa: E402
 
@@ -106,6 +106,35 @@ def walk_select(cfg, mem, limit, md5s):
             if any(is_inside(dirpath, g) for g in guards):
                 dirnames[:] = []
                 continue
+            drec = mem.dirs.get(mem.rel(dirpath))
+            if drec is not None:
+                # one line covers this whole subtree (`type: "dir"`). Cheap
+                # check first — count, bytes, newest mtime; on drift, the
+                # tree_md5 decides touch vs new work, exactly as the per-file
+                # md5 re-check does. Identical content behind drifted stats
+                # stays seen but is named in the log: the fingerprint will be
+                # recomputed every pass until compact.py refreshes the line.
+                # Real drift = the whole subtree comes back as candidates
+                # (its files have no lines of their own — that is the deal).
+                fp = dir_fingerprint(dirpath, with_md5=False)
+                stat_ok = all(fp[k] == drec.get(k) for k in
+                              ("count", "total_size", "max_mtime"))
+                if not stat_ok and drec.get("tree_md5"):
+                    stat_ok = (dir_fingerprint(dirpath, with_md5=True)
+                               ["tree_md5"] == drec["tree_md5"])
+                    if stat_ok:
+                        ignored.append((nfc(dirpath),
+                                        "dir line stale (touched, content "
+                                        "identical) — re-run compact.py to "
+                                        "refresh the fingerprint"))
+                if stat_ok:
+                    counts["scanned"] += fp["count"]
+                    counts["seen"] += fp["count"]
+                    counts["seen_dirs"] = counts.get("seen_dirs", 0) + 1
+                    dirnames[:] = []
+                    continue
+                ignored.append((nfc(dirpath),
+                                "dir line DIVERGED — subtree re-collected"))
             rel_dir = os.path.relpath(dirpath, wroot)
             dirnames[:] = sorted(d for d in dirnames
                                  if not excluded(os.path.join(rel_dir, d), excl))
