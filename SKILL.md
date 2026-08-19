@@ -83,6 +83,10 @@ Done when dry-run and execution report the same counts and `failed` is 0. `refus
 
 `route.py --learn` closes the pass: scores every shadow rule against each file's final path, mines new candidates (the simplest form with zero counterexamples, born `status: shadow`), reports `ripe` rules, reports every `unanswered` file BY NAME and writes its memory line so the next pass selects it first, lists the `refused` files separately (their lines are already written, by apply), warns on dead `anchors:` pointers, archives `bench/` → `logs/<pass>/`. You then write the leftovers and their open questions into `wiki/state.md`.
 
+**This whole step runs in a subagent, like vision — and that includes `--learn` itself.** A rule is instructed by replaying it over thousands of re-extracted documents to count its true and false positives; done inline, that volume lands in the very conversation that holds the config, the ledger and the pass's decisions. Spawn the agent, let it run `--learn`, read the report, replay every rule that moved **against the disk and the memory**, and come back with a figures report: diagnosis, proposed YAML, matched / true / false, plus the `unanswered` and `refused` files named. It never hand-edits `config.yaml`; you apply the decision, write `wiki/state.md`, and put the questions to the user.
+
+Two traps it must be told about, or it will mistake bookkeeping for evidence. **A rule mined in the pass's own context matches the pass, not the corpus** — the miner's counter-sample is the pass's textual entries, and unique-among-250 is not discriminating-among-thousands. And **`--audit` runs text conditions against the recorded `desc`, not the document** — it says so in its output, and the note is easy to skip past: a rule showing `disagreed: 0` there has been compared to the human's own summary, not to the bytes. Measured once: a rule at `disagreed: 0` in `--audit` was wrong on 55 of the 64 documents it actually touched on disk.
+
 Done when `bench/` is gone from the workspace and every leftover is named in `wiki/state.md`.
 
 ## Questions — three moments, never a fourth
@@ -95,7 +99,7 @@ Done when `bench/` is gone from the workspace and every leftover is named in `wi
 
 A rule earns its way in; it is never handed over on the strength of looking right. Born `status: shadow` from `--learn` only, evaluated on every pass, **never applied — a shadow rule fills its own column and nothing else, and route.py stops the pass if a non-active rule ever reaches the routing columns** — passes, hits, agreed, **disagreed** accumulate in the rule itself. After ≥5 passes with zero disagreement:
 
-1. `route.py --audit <rule-id>` — replay against memory: retroactive precision on files already judged, diverging files listed. Cheap, read-only, runs anytime.
+1. `route.py --audit <rule-id>` — replay against memory: retroactive precision on files already judged, diverging files listed. Cheap, read-only, runs anytime. **For a text condition it is indicative only**: the bytes left the bench, so the condition is tested against each record's `desc` — the human's summary, not the document. Its own output says so. Never promote a text rule on `--audit` alone; `--full-audit`, which reads the disk, is the one that decides.
 2. `route.py --full-audit <rule-id>` — confront the whole disk, including what no pass ever judged. Beyond 500 candidates it says so and you sample. No ground truth here — the list is for human judgement.
 3. The user promotes, on that evidence: `status: active` plus a dated `history:` line. Refusal → history line, rewrite, `cycle: N+1`, counters reset.
 
