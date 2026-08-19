@@ -38,50 +38,6 @@ Rules live in your `config.yaml`. After each pass the agent suggests new ones
 from what it just learned, and you decide whether to keep them — so the same
 kind of document doesn't need thinking about twice.
 
-## 💸 What it costs
-
-The scripts are free — they are Python. Walking the tree, hashing, extracting
-text, matching rules, moving files: hundreds of documents, none of which land in
-the conversation. What costs tokens is the reading an agent has to do itself.
-
-| Cheapest first | Why |
-|---|---|
-| `collect` · `route` · `apply` | Python, no model in the loop |
-| Asking the memory (`stats`, `show`, `find`) | a few lines back, whatever the corpus size |
-| **route** lane | a rule already recognised it; the agent only confirms |
-| **propose** lane | the agent opens the file and reads the text |
-| **residual** lane | nothing matched, so the agent reads to find out |
-| **vision** | page images — one scan can cost more than everything above it |
-
-So the whole game is keeping files out of the vision lane:
-
-- **Install `pypdf` and `pypdfium2`.** A PDF with a text layer then extracts in
-  Python for nothing. Without them, that same file gets rendered and looked at.
-- **Scans have no text layer**, so they always cost. Sitting on a pile of them?
-  Give them their own pass and lower `batch_size` for it.
-- **Promote rules.** Every rule that goes `active` moves a whole class of
-  document from *residual* to *route*, for good.
-- **Nothing is read twice.** A file already in `memory.jsonl` is skipped on its
-  hash — the memory is what stops a corpus costing the same thing every pass.
-
-## ⏱️ How to spend it
-
-Two habits, from using it daily:
-
-**One pass per context window, and start that window fresh.** A pass carries your
-config, the ledger, hundreds of entries and every decision taken along the way.
-Sharing that window with unrelated work makes both go badly. It is the same
-reason vision is always delegated to subagents: so page images never reach the
-main conversation.
-
-**One pass per five-hour window, if you are working alongside it.** Claude and
-ChatGPT subscriptions meter usage in rolling windows, and a full pass is one
-large chunk of it. Run the pass, then get on with your day — leftovers are
-written to `wiki/state.md`, and the next pass picks them up first.
-
-Neither is enforced anywhere. It is just what the tool feels like when it is
-used well.
-
 ## 📦 What goes where
 
 | Place | Holds |
@@ -117,3 +73,24 @@ and removals land in a folder inside your workspace — slower, never destructiv
 On macOS it also writes Finder comments and tags, so Spotlight finds a document
 by what it says rather than what it's called. On Windows and Linux, search goes
 through the memory instead (`memory.py find <text>`).
+
+## 💸 Token costs
+
+The scripts are free — they are Python. Hundreds of files get walked, hashed and
+extracted without ever entering the conversation. What costs is what an agent has
+to read itself.
+
+Cheapest to dearest: `collect` · `route` · `apply` and memory queries (nothing) →
+**route** lane, where a rule matched and the agent only confirms → **propose**,
+where it opens the file → **residual**, where it reads to find out → **vision**,
+page images, and one scan can outweigh all the rest.
+
+So keep files out of vision. Install `pypdf` and `pypdfium2` and every PDF with a
+text layer extracts for free; give scans a pass of their own; promote rules, since
+each one moves a class of document from *residual* to *route* for good. Nothing is
+ever read twice — `memory.jsonl` skips on the hash.
+
+Two habits: **one pass per context window, freshly started**, because a pass
+carries your config, the ledger and every decision along the way. And **one pass
+per five-hour window** if you are working alongside it — subscriptions meter usage
+in rolling windows. Leftovers wait in `wiki/state.md`.
