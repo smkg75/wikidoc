@@ -14,7 +14,7 @@ ends the pass with an error, never a green report.
 Evidence, per file: page-1 text truncated at ~4000 chars (`truncated` flag),
 page count, validated identifiers and dates, byte-identical duplicates by
 (size, md5) with no size threshold and no group cap — the thresholds were
-exactly where v1's misses lived. No readable text and more than 1 KiB of
+exactly where an earlier extractor's misses lived. No readable text and more than 1 KiB of
 bytes → `needs_vision` plus a page-1 PNG; at 1 KiB or less → opaque
 "no-content".
 
@@ -24,7 +24,7 @@ the agents downstream; this script only converts bytes.
 
 Usage:
     collect.py [N]                        select and extract a batch
-                                          (default batch_size, else 500)
+                                          (default batch_size, else 600)
     collect.py --render PATH --pages A-B  on-demand page renders for an agent
                                           whose harness cannot read the file
 
@@ -319,7 +319,7 @@ def main():
     ap = argparse.ArgumentParser(
         description="step 1: choose the pass's files, read their evidence")
     ap.add_argument("limit", nargs="?", type=int,
-                    help="batch size (default: batch_size from config, else 500)")
+                    help="batch size (default: batch_size from config, else 600)")
     ap.add_argument("--render", metavar="PATH",
                     help="render pages of one file and exit")
     ap.add_argument("--pages", metavar="A-B", default="1",
@@ -332,7 +332,7 @@ def main():
         return
 
     mem = Memory(root=cfg["root"])
-    limit = args.limit if args.limit is not None else int(cfg.get("batch_size", 500))
+    limit = args.limit if args.limit is not None else int(cfg.get("batch_size", 600))
     ws = cfg["workspace"]
     bench = os.path.join(ws, "bench")
     render_dir, log_dir = os.path.join(bench, "renders"), os.path.join(bench, "logs")

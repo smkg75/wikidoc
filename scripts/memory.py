@@ -14,7 +14,7 @@ map to a LIST of records (byte-identical duplicates live at several paths).
 Keys are root-relative, or `~/…` for a file an outside inbox brought in
 (`rel_key` — one key function, so collect, route and apply agree).
 
-v1 records carried a `level` field; v2 calls it `triage`. Readers accept both,
+Migrated records carry a `level` field; the current name is `triage`. Readers accept both,
 writers emit only `triage`.
 
 CLI (read-only — memory.py chooses nothing):
@@ -189,7 +189,7 @@ def load_config(ws=None):
         cfg = yaml.safe_load(f) or {}
     cfg["workspace"] = ws
     cfg["root"] = os.path.abspath(os.path.expanduser(cfg.get("root", "~/Documents")))
-    cfg.setdefault("batch_size", 500)
+    cfg.setdefault("batch_size", 600)
     cfg.setdefault("exclude", [])
     cfg.setdefault("inboxes", [])
     cfg.setdefault("anchors", [])
@@ -314,7 +314,7 @@ class Memory:
                     continue
                 self.lines += 1
                 if "triage" not in rec and "level" in rec:
-                    rec["triage"] = rec["level"]     # v1 vocabulary, read-side only
+                    rec["triage"] = rec["level"]     # legacy vocabulary, read-side only
                 self._index(rec)
 
     def _index(self, rec):

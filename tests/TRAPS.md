@@ -74,13 +74,13 @@ different bytes (trailing newlines differ). Correct: NOT flagged as
 duplicates — dedup is md5, byte-identical only. Both route on content.
 
 **Small byte-identical duplicates** (`Traps/attestation.txt`,
-`Docs/attestation-copie.txt`, ~100 bytes each) — pinned v1 bug: a
-DEDUP_MIN_SIZE of 4096 made every real duplicate invisible, and the v1
+`Docs/attestation-copie.txt`, ~100 bytes each) — pinned bug: a
+DEDUP_MIN_SIZE of 4096 made every real duplicate invisible, and the old
 fixture was padded past the threshold to hide it. Correct: grouped as
 duplicates with no size threshold, both `propose` (duplicate guard), never
 both trashed.
 
-**Dangling symlink** (`Traps/lien-mort.pdf` → missing target) — pinned v1
+**Dangling symlink** (`Traps/lien-mort.pdf` → missing target) — pinned
 bug: an unguarded `os.stat` killed the pass. Correct: `lexists` but not
 `exists` = collect never makes it an entry but COUNTS it (`ignored` in the
 stdout counts) and LISTS it (`IGNORED <path> <- dangling symlink` on stdout
@@ -89,7 +89,7 @@ empty itself of a dead symlink, so an invisible skip is a lie about the inbox.
 Apply fails an entry that goes dangling mid-pass and continues, and if it had
 already moved files, their memory lines are already written (incremental
 memory — see below). Wrong: five passes with the symlink in no count and no
-log, which is exactly what v2's cold test caught.
+log, which is exactly what the cold test caught.
 
 **Image-only sensitive scan** (`Inbox/scan-0042.pdf`) — a prescription whose
 text is drawn as pixels: readable by vision, empty to extraction. Correct:
@@ -98,13 +98,13 @@ refuses to judge it while text is empty (vision barrier, exit 2); once a
 vision agent fills `text` from the render (`lu: "render"`), the sensitive
 guard fires → `propose`. A trash decision on it must be REFUSED by apply
 unless `reviewed: "vision"` — the probe re-extracts text and ids from the
-file itself and finds no language, and that is exactly the case v1 trashed
+file itself and finds no language, and that is exactly the case an earlier version trashed
 blind. This one is READABLE: withdrawing it instead of reading the render
 is the lazy exit the ladder forbids.
 
 **MM/YYYY receipts** (`Docs/Loyer/quittance-01..05.pdf`,
-`Inbox/quittance-avril.pdf`) — pinned v1 bug: the only date in these files
-is `MM/YYYY` and v1 could not parse it, so `{doc_year}` never resolved.
+`Inbox/quittance-avril.pdf`) — pinned bug: the only date in these files
+is `MM/YYYY` and the old parser could not read it, so `{doc_year}` never resolved.
 Correct: `doc_year` extracted (2025), destination renders
 `…/quittances-2025/`.
 
@@ -115,7 +115,7 @@ folder, never a silent default year.
 
 **Accented content vs unaccented pattern**
 (`Docs/Loyer/quittance-accents.txt`, "Période", "Quittance" mixed case) —
-pinned v1 bug: matching was accent-sensitive in one code path. Correct:
+pinned bug: matching was accent-sensitive in one code path. Correct:
 every comparison goes through `memory.norm()`; this file matches a rule
 written without accents.
 
@@ -161,7 +161,7 @@ attempts in the memory line, and the next collect re-selects them FIRST.
 Wrong: a `lu` on an unread file, an exit-2 deadlock, or a withdrawal whose
 reason lists no attempts.
 
-## Pipeline traps (pinned v1 bugs not tied to one file)
+## Pipeline traps (pinned bugs not tied to one file)
 
 **Incremental memory** — kill apply mid-`--execute` (or simulate: the
 dangling symlink fails an entry mid-list). Correct: every action already
@@ -182,7 +182,7 @@ withdrawn entry is exempt, counted `withdrawn`, and gets no triage.
 **Prose gate on the trash probe** — write a trash decision on
 `vieille-lettre-01.doc` without `reviewed: "vision"`. Correct: REFUSED —
 the probe's text fallback yields replacement-char soup, which is non-empty
-but fails `looks_like_prose`, and debris is not a reading. v1 passed
+but fails `looks_like_prose`, and debris is not a reading. an earlier version passed
 exactly this trash. With `reviewed: "vision"` (an agent asserting it looked
 this pass) the same entry goes through. The refusal is reported `REFUSE` and
 counted `refused`, never `failed`: a guard doing its job must not make the
@@ -203,9 +203,9 @@ silently ignores it — a dead pointer is a fact that left the instructions
 file and arrived nowhere. Then `chmod 000` the anchor file itself and re-run:
 the warning must say the file cannot be READ, not that it does not resolve —
 "does not resolve" on an existing file reads as "it was deleted", and that
-wrong conclusion was drawn on v2's first real pass.
+wrong conclusion was drawn on the first real pass.
 
-**Inbox outside root** — pinned v2 bug (first production pass): put the
+**Inbox outside root** — pinned bug (first production pass): put the
 configured inbox OUTSIDE `root` (as Desktop and Downloads are on a real
 machine) with one file in it. Correct: collect walks it as a root of its own
 — the file is scanned, counted under its inbox, keyed `~/…` (never `../…`)
@@ -215,7 +215,7 @@ and the inbox reports `candidates: 0, remaining: 0`, which reads "inbox
 clean" — a `policy: empty` promise that can never be checked. Counter-test:
 the same inbox under `root` must not be scanned twice.
 
-**A symlink is not a duplicate of its target** — pinned v2 bug (first real
+**A symlink is not a duplicate of its target** — pinned bug (first real
 batch): put a symlink next to the file it points at, both inside the corpus.
 Correct: the link comes back `opaque: "symlink"` with `link_to`, `md5: null`,
 NO `duplicate_of`, no `needs_vision`; route sends it residual naming the
@@ -225,7 +225,7 @@ grouped as a byte-identical duplicate — and a dedup decision bins the link.
 On a real corpus that meant 24 links of an archived mail-out (built as links
 precisely so the originals are not duplicated) all proposed for the bin.
 
-**A refused walk is not an empty corpus** — pinned v2 bug (first production
+**A refused walk is not an empty corpus** — pinned bug (first production
 pass): `chmod 000` the root (or point `root:` at a path that does not exist)
 with a non-empty `memory.jsonl`. Correct: collect exits non-zero, names the
 root under `unreadable_roots` and `IGNORED`, and collects nothing. Wrong (the
@@ -235,7 +235,7 @@ cheerfully. Same for a sub-directory: `chmod 000` one folder under a readable
 root and it must appear in `unreadable_dirs` and `IGNORED`, not vanish.
 Counter-test: a genuinely empty corpus with an empty memory still exits 0.
 
-**Answered withdrawal closes the pass** — pinned v2 bug (cold test): withdraw
+**Answered withdrawal closes the pass** — pinned bug (cold test): withdraw
 a file in pass N, then in pass N+1 have the "user" answer — write a real
 decision (`move` + `dst`) on the still-unread entry. Correct: the decision
 counts as triage `propose` (a human judgement is the strongest evidence there
@@ -243,9 +243,9 @@ is): `route.py` stamps that triage instead of exiting 2, and `--learn` accepts
 the entry once `result` is stamped even without a triage (reported under
 `answered_withdrawals`) — either order closes the pass. Wrong: apply performs
 the move, then `--learn` refuses ("entries without a triage") and `route.py`
-re-exits 2 — no verb can close the pass, the wedge v2's cold test hit.
+re-exits 2 — no verb can close the pass, the wedge the cold test hit.
 
-**Resume reconciliation** — pinned v2 bug (cold test): kill apply --execute
+**Resume reconciliation** — pinned bug (cold test): kill apply --execute
 between the memory append and the `result` stamp (or simulate: after a
 successful run, delete `result`/`final` from the moved entry in
 `bench/routing.json`). Correct: `apply.py --resume --execute` reconciles — the
@@ -256,7 +256,7 @@ memory line from this pass) is stamped `result` and reported `reconcile`; and
 was handled. Note `--resume` alone prints a dry-run — dry-run stays apply's
 default in every mode.
 
-**A symlink keeps a memory key of its own** — pinned v2 bug (second cold
+**A symlink keeps a memory key of its own** — pinned bug (second cold
 test): put a live symlink next to its target, both under `root`, and run a
 full pass. Correct: two memory lines, one per name; `stats` counts both;
 the next collect reports the link `seen`. Wrong (the shipped bug): `rel_key`
@@ -268,7 +268,7 @@ must still canonicalise (`lien-dossier/x.pdf` and `sub/x.pdf` are one file,
 one key), and a link inside `root` pointing outside it keeps a root-relative
 key.
 
-**A refusal is recorded as a refusal** — pinned v2 bug (second cold test):
+**A refusal is recorded as a refusal** — pinned bug (second cold test):
 decide `trash` on a sensitive file with no `keeper`, run apply `--execute`,
 then `--learn`. Correct: apply writes the memory line (`decision: "refused"`,
 `reason` naming the refused decision and the guard) and stamps
@@ -279,7 +279,7 @@ shipped bug): no line at all from apply, so `--learn` wrote
 refusal both vanished, and the ledger claimed nobody could read a file that
 had been read and judged.
 
-**Extractor debris passes for text** — pinned v2 bug (extract audit, 4 395 real
+**Extractor debris passes for text** — pinned bug (extract audit, 4 395 real
 PDFs): plant a file whose page-1 text is `/UNIC0037/UNIC0035/UNIC0030…` repeated,
 and one whose text is a three-word title. Correct: the debris is refused (glyph
 names stripped, and refused outright when they drown the text) so the file goes
@@ -291,7 +291,7 @@ stay green: a real invoice repeating one word in 39 % of its tokens is prose; an
 invoice carrying a few `/uni00A0` is prose; `C o n t r a i n t e s` is prose;
 `inscription`/`prescription` are words; `ÅÁgkIYIr` is not.
 
-**A guard must survive damaged extraction** — pinned v2 bug (same audit): write
+**A guard must survive damaged extraction** — pinned bug (same audit): write
 a `sensitive:` line as a human writes it (`relevé d'identité bancaire`) and feed
 it a PDF whose text comes back `Relevé d’IdentitéBancaire` with a glued
 `BankIdentiferCodeFR91…`. Correct: the tripwire fires (typographic apostrophe

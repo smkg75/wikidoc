@@ -4,7 +4,7 @@
 Three consumers need to read file content: collect.py (mass extraction),
 apply.py (the sensitive probe re-reads text AND ids from disk, trusting
 nothing in the working file), route.py --full-audit (confronting a text rule
-with the whole disk). v1 duplicated this code and ended up with two notions
+with the whole disk). An earlier version duplicated this code and ended up with two notions
 of text equality, the weaker one guarding the sensitive files.
 
 Library only: imported, never executed. No CLI, no main().
@@ -445,7 +445,7 @@ def doc_year(dates):
 # One evaluator for every config condition — rules, entities, and above all
 # `sensitive:`. It lives in the library because two STEPS need it (route.py
 # for triage, apply.py for the trash probe) and steps may not import steps;
-# a second, smaller copy in apply.py is how v1's weakest matcher ended up
+# a second, smaller copy in apply.py is how the weakest of two matchers ended up
 # guarding the most sensitive files.
 
 def _squeeze(v):

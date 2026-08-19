@@ -47,6 +47,8 @@ kind of document doesn't need thinking about twice.
 
 The workspace is where your setup, your history and everything the agent learned
 about your documents lives. Copy it to another machine and you keep all of it.
+It is yours to extend — your own notes, reports and scripts live happily beside
+the tool's files, and each install grows the wiki its owner needs.
 
 ## 🛟 Safety
 
@@ -61,6 +63,12 @@ about your documents lives. Copy it to another machine and you keep all of it.
 Rules are optional. A config that says only where your documents live is a
 working install — every file goes to the careful lane and the agent reads it.
 You add a rule when you've decided the same thing twice, not before.
+
+## 🛠️ Development
+
+Interfaces and incident memory live in [`CONTRACTS.md`](CONTRACTS.md);
+deferred work in [`BACKLOG.md`](BACKLOG.md). The skill itself loads only
+`SKILL.md`, `SETUP.md`, `config.example.yaml` and `scripts/`.
 
 ## 💸 Token costs
 

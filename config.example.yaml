@@ -10,7 +10,7 @@
 workspace: ~/.wikidoc
 root: ~/Documents
 language: fr                   # the language summaries are written in
-batch_size: 500
+batch_size: 600
 
 exclude:                        # glob patterns, matched against paths under root
   - "*/node_modules/*"
@@ -109,6 +109,12 @@ sensitive:
                       iban, bulletin de paie, résultats d'analyses, ordonnance]
   path_under: [Personal/Identity, Personal/Health]
   id_kind_present: [iban]
+  # Families reissued on demand (same content, new bytes and date every
+  # download): when BOTH a trash candidate and its named keeper match the
+  # SAME family below, the newest copy proves the survivor and the sensitive
+  # refusal lifts — the one exception to byte-identical keeper proof.
+  # supersedable:
+  #   - {id: proof-of-address, text_contains_any: [justificatif de domicile]}
 
 # Tag name -> Finder colour (macOS). Elsewhere the names still land in the
 # ledger; only the colours are lost.

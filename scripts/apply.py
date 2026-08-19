@@ -195,7 +195,7 @@ def own_text(path, ext):
 
 # The matcher itself is extract.sensitive_hit — the SAME engine route.py
 # triages with, full all/any/not grammar included. A local, smaller copy here
-# is how v1's weakest matcher ended up guarding the most sensitive files.
+# is how the weakest of two matchers ended up guarding the most sensitive files.
 # What stays local is the stance: the probe feeds it only evidence re-read
 # from disk. Taking routing.json's word for the contents would make the
 # protection only as strong as the working file — a trash entry written

@@ -114,7 +114,7 @@ def build(target):
 
     # -- ordinary documents, so the rules have something to bite on ----------
     # Rent receipts whose ONLY date is MM/YYYY: doc_year must come from it,
-    # or {doc_year} destinations never resolve (pinned v1 bug).
+    # or {doc_year} destinations never resolve (pinned bug).
     # Each receipt carries a distinct reference: same period + same issuer must
     # NOT mean same bytes, or the duplicate guard fires where the manifest
     # expects a route and the grader chases a phantom.
@@ -217,7 +217,7 @@ def build(target):
         if e.casefold() == "casse-test.txt":
             add(f"Traps/{e}", "residual", "case-only sibling")
 
-    # byte-identical duplicates UNDER 4096 bytes — v1's DEDUP_MIN_SIZE hid
+    # byte-identical duplicates UNDER 4096 bytes — a size threshold once hid
     # exactly this size class; the fixture that "proved" dedup was padded.
     dup = ("ATTESTATION D'ASSURANCE HABITATION\n"
            "Assureur : MUTUELLE DU PHARE\nContrat : 2025-4417\n")
@@ -302,7 +302,7 @@ def build(target):
     except OSError:
         traps["long_filename"] = False
 
-    # -- v2 traps ------------------------------------------------------------
+    # -- later traps ------------------------------------------------------------
     # a symlink whose target does not exist: lexists() but not exists()
     try:
         link = os.path.join(target, "Traps/lien-mort.pdf")
