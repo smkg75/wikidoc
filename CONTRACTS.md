@@ -276,8 +276,9 @@ barrier and its exemptions (known_as, withdrawals, user-decided entries)
 are SKILL.md ③'s; the contract details: the barrier condition is
 `needs_vision: true` AND empty `text` AND no decision, exit 2 with the
 paths listed. Shadow predictions computed BEFORE guards (guards must not
-blind learning). Guard order: skip (known md5) → sensitive → duplicate →
-inbox → entity tie; then rules. Strength graded on the branch that MATCHED;
+blind learning). Guard order: skip (known md5) → settled (a
+hand-made line already placed this file — SKILL.md ③) → sensitive →
+duplicate → inbox → entity tie; then rules. Strength graded on the branch that MATCHED;
 an empty match dict matches nothing. Destination rendering: always trailing
 `os.sep`; an unresolved variable ({doc_year} with no date) → the rule does
 not fire, entry goes `propose` with the variable named in `why` — never an
