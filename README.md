@@ -62,18 +62,6 @@ Rules are optional. A config that says only where your documents live is a
 working install — every file goes to the careful lane and the agent reads it.
 You add a rule when you've decided the same thing twice, not before.
 
-## 💻 Platforms
-
-macOS, Windows and Linux. Needs Python 3.9+ and PyYAML.
-
-Three more packages are optional and worth having: `pypdf` and `pypdfium2` read
-PDFs, `send2trash` uses the real bin. Without them PDFs go to the careful lane
-and removals land in a folder inside your workspace — slower, never destructive.
-
-On macOS it also writes Finder comments and tags, so Spotlight finds a document
-by what it says rather than what it's called. On Windows and Linux, search goes
-through the memory instead (`memory.py find <text>`).
-
 ## 💸 Token costs
 
 The scripts are free — they are Python. Hundreds of files get walked, hashed and
@@ -94,3 +82,15 @@ Two habits: **one pass per context window, freshly started**, because a pass
 carries your config, the ledger and every decision along the way. And **one pass
 per five-hour window** if you are working alongside it — subscriptions meter usage
 in rolling windows. Leftovers wait in `wiki/state.md`.
+
+## 💻 Platforms
+
+macOS, Windows and Linux. Needs Python 3.9+ and PyYAML.
+
+Three more packages are optional and worth having: `pypdf` and `pypdfium2` read
+PDFs, `send2trash` uses the real bin. Without them PDFs go to the careful lane
+and removals land in a folder inside your workspace — slower, never destructive.
+
+On macOS it also writes Finder comments and tags, so Spotlight finds a document
+by what it says rather than what it's called. On Windows and Linux, search goes
+through the memory instead (`memory.py find <text>`).
