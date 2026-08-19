@@ -5,7 +5,7 @@ document. If a contract is wrong, report it back — do not silently deviate.
 
 Work happens IN THIS REPO on `main` — one branch, no feature branches: the
 repo has a single author who iterates in place. Every change ends with a
-commit AND a push to `origin/main` (github.com/smkg75/wikidoc, private).
+commit AND a push to `origin/main` (github.com/smkg75/wikidoc, public).
 `~/.wikidoc/` is the production workspace and is never versioned here.
 
 Language: all code, comments and docs in English (the skill will be
@@ -86,7 +86,7 @@ what the tool knows about every document and why.
  "triage": "route", "decision": "move|trash|tag|rename|none|unanswered",
  "reason": "…", "size": 48213, "mtime": 1754899200, "md5": "…"|null,
  "desc": "…"|null, "ids": {"siren": ["123456782"]}|null, "tags": […]|null,
- "date_doc": "YYYY-MM-DD"|null, "provenance": "pass"|"migrated"}
+ "date_doc": "YYYY-MM-DD"|null, "provenance": "pass"|"migrated"|"human-decision"}
 ```
 
 `path` is NFC and root-relative, or `~/…` for a file an inbox outside root
@@ -196,7 +196,7 @@ deleted).
 | `path size mtime md5 ext pages text truncated prose needs_vision render ids dates doc_year duplicate_of known_as known_desc opaque error` | collect.py | ① |
 | `text lu` — or, on an unreadable file, `decision: "unanswered"` + `reason` (the withdrawal) | vision agent | ② |
 | `triage why guards rule entity strength destination shadow` | route.py | ③ |
-| `decision dst desc tags date_doc reviewed` | decide agent | ④ |
+| `decision dst desc tags date_doc reviewed keeper` | decide agent | ④ |
 | `result final` | apply.py | ⑤ |
 
 `lu`: `"text"` (extracted layer sufficed) · `"render"` (read from PNG) ·
