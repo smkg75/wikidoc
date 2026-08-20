@@ -3,7 +3,7 @@
 Sort your documents into a corpus you can actually query.
 
 wikidoc files your documents, sorts them by what they contain, and writes down
-what each one is. Once that's done, you stop digging through folders — you ask.
+what each one is. Once that's done, you stop digging through folders, you ask.
 
 ## 🔍 What people use it for
 
@@ -18,10 +18,10 @@ what each one is. Once that's done, you stop digging through folders — you ask
 No config yet? It sets itself up:
 
 1. Checks what your machine can do.
-2. Reads a sample of your documents — company IDs, dates, who keeps sending you things.
+2. Reads a sample of your documents: company IDs, dates, who keeps sending you things.
 3. Asks you only what it couldn't work out on its own: *"this company ID shows up in 47 files — whose is it?"*
 4. Writes your config, in plain YAML you can read and edit.
-5. Dry run — shows what it would move, moves nothing.
+5. Dry run: shows what it would move, moves nothing.
 
 About ten minutes, once.
 
