@@ -209,14 +209,15 @@ def settled_by_hand(e, cfg, mem):
     right for the company's bank orders and wrong for the invoice the company
     sent to its owner as a private person.
 
-    So: when the last line for this exact path was made by a human and left the
-    file here, that reading outranks anything rules or entities can derive now.
-    It does not decide — it forbids deciding alone.
+    So: when the last line for this exact path was made by hand — the user's
+    own word (`human-decision`) or the agent reading the file and judging
+    alone (`llm-decision`) — that reading outranks anything rules or entities
+    can derive now. It does not decide — it forbids deciding alone.
     """
     if mem is None:
         return None
     rec = mem.by_path.get(nfc(rel_key(e["path"], cfg["root"])))
-    if not rec or rec.get("provenance") != "human-decision":
+    if not rec or rec.get("provenance") not in ("human-decision", "llm-decision"):
         return None
     if rec.get("decision") not in ("none", "move", "rename"):
         return None                # trash and refused are other conversations

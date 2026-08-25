@@ -32,12 +32,16 @@ reading a document, writing a desc, deciding — belongs to agents.
 The hand-filing protocol is the SKILL.md invariant of the same name — what a
 hand gesture owes (`Memory.record(...)`, `triage: "propose"`, a `reason` that
 says why, written after the destination is re-stat'ed) lives there and only
-there. Two contract-side additions: `provenance: "human-decision"` covers any
-judgement made outside a pass, not only a user's word; and the verification
-bound — reload `Memory` from disk and walk the destination: zero files
-without a line. The one file that may legitimately have no line is one whose
-destination is undecided — its absence from memory IS the open question, and
-it belongs in `wiki/state.md`.
+there. Two contract-side additions: `provenance` names WHO judged, not just
+that a judgement happened outside a pass — `"human-decision"` when the
+user's own word set the destination, `"llm-decision"` when the agent read
+the file and decided alone, unasked. Conflating the two is the bug this
+distinction fixes: a label that reads as "the user decided" must not be
+stamped on a call the user never saw. And the verification bound — reload
+`Memory` from disk and walk the destination: zero files without a line. The
+one file that may legitimately have no line is one whose destination is
+undecided — its absence from memory IS the open question, and it belongs in
+`wiki/state.md`.
 
 ## Vocabulary
 
@@ -64,7 +68,7 @@ what the tool knows about every document and why.
  "triage": "route",
  "decision": "move|trash|tag|rename|none|unanswered|refused",
  "reason": "…", "size": 48213, "mtime": 1754899200, "md5": "…"|null,
- "provenance": "pass"|"migrated"|"human-decision"}
+ "provenance": "pass"|"migrated"|"human-decision"|"llm-decision"}
 ```
 
 `desc`, `ids`, `tags`, `date_doc` are optional keys, omitted when absent —
