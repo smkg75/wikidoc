@@ -62,3 +62,45 @@ until someone picks them up.
    are proposed forever. That is the contract as decided; watch whether the
    friction in practice (every Downloads invoice needing a click) justifies a
    per-inbox `allow_rules: true` escape hatch some day.
+
+9. **`route_entry` never copies a rule's `tags:` into the entry.** The field
+   exists in the grammar, `shadow_predictions` reports it and `score_shadows`
+   grades on it — but an active rule carrying only `tags:` (production has
+   two, kbis and bulletin-paie) applies nothing at all. Direction: propagate
+   tags into the routing columns, or drop it from the grammar.
+
+10. **The "10 passes at 0 hits" retirement is unreachable.** `rule_report`
+    computes `passes = stored + (1 if rid in hits else 0)`, so a rule that
+    never matches never increments `passes`, and
+    `passes >= dead_after_passes and h == 0` can never fire. Nothing retires
+    a diverging rule either — only `cycle > max_cycles` does, and cycles are
+    bumped by hand. SKILL.md promises an automatic retirement the code cannot
+    produce. Direction: increment `passes` for every rule evaluated, not only
+    for those that matched.
+
+11. **The miner rewards the least specific n-gram, and mines in a space its
+    own matcher cannot read.** `min(unique, key=lambda s: (len(s), s))` takes
+    the SHORTEST phrase; and `ngrams()` joins word tokens with single spaces
+    while `_says` matches against `norm(text)`, which keeps punctuation — so
+    an n-gram mined across a comma cannot match any of its parents by
+    construction. Together they produced `text_contains_any: ["4 20"]` out of
+    "4,20 %": 156 documents touched corpus-wide, 0 of the 4 that engendered
+    it. Direction: take the longest, require an alphabetic token, reject the
+    purely numeric, and validate every candidate against the group it was born
+    from before writing it.
+
+12. **The miner's counter-sample is the pass, not the corpus.** `others` is
+    built from the pass's own textual entries (248 in the measured pass) while
+    the corpus held 3 860 — "unique among 248" is not "discriminating among
+    thousands". SKILL.md ⑥ warns the agent about this; the miner itself does
+    not know it. Direction: widen the counter-sample to `memory.jsonl`'s
+    descriptions, as branch 4 already does for identifiers.
+
+13. **`extract.py` never reads AcroForm fields.** A filled administrative form
+    whose values are field entries with no appearance stream extracts as
+    mojibake or nothing, so it goes to `needs_vision` — where the render shows
+    the form BLANK and the whole reader ladder concludes "empty". Measured on
+    a real employer attestation: 105 filled fields out of 642, invisible to
+    every reader in the ladder. `PdfReader.get_fields()` and
+    `pdftotext -layout` both restore them. Direction: query the AcroForm
+    before the vision gate and fold field values into the entry's text.
