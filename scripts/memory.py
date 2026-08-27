@@ -192,7 +192,7 @@ def load_config(ws=None):
     cfg.setdefault("batch_size", 600)
     cfg.setdefault("exclude", [])
     cfg.setdefault("inboxes", [])
-    cfg.setdefault("anchors", [])
+    cfg.setdefault("anchors", ["~/.claude/CLAUDE.md"])
     cfg.setdefault("identifiers", [])
     cfg.setdefault("entities", [])
     cfg.setdefault("rules", [])

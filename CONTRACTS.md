@@ -307,9 +307,10 @@ belongs to apply.py alone.
 - Accept an entry whose `result` is stamped even without a triage — the
   answered-withdrawal path (apply ran before route could stamp `propose`);
   refusing it would wedge the pass, and the cold test hit exactly that.
-- **Anchor check**: for each file in config `anchors:`, warn on any
-  backticked path it cites that no longer resolves — a dead pointer is a
-  fact that left the instructions file and arrived nowhere. A relative
+- **Anchor check**: for each file in config `anchors:` (default when the
+  key is absent: `~/.claude/CLAUDE.md`), warn on any backticked path it
+  cites that no longer resolves — a dead pointer is a fact that left the
+  instructions file and arrived nowhere. A relative
   pointer resolves against the workspace AND against root before it warns;
   slash-commands are not paths.
 

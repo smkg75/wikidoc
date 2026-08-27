@@ -103,8 +103,9 @@ chose.
 Finish `config.yaml` with `config.example.yaml` as the shape — read it, do not
 copy it; the comments are part of the contract. Each identifier from SURVEY
 gets a pattern and a `validate:` (`luhn`, `iban`, or `none`) — a candidate that
-fails its check is not an id. `anchors:` lists the user's instruction files so
-every pass checks their pointers. Seed rules from the SURVEY families, each
+fails its check is not an id. `anchors:` is set only when the instruction file
+lives somewhere other than `~/.claude/CLAUDE.md`, the default the pointer check
+reads (§6 says why that file). Seed rules from the SURVEY families, each
 born `status: shadow`, counters at 0, `learned_from` filled — evaluated every
 pass, never applied until the user promotes them. Create empty `memory.jsonl`;
 complete `wiki/context.md`.
@@ -113,6 +114,14 @@ Done when `config.yaml` parses, `memory.py stats` prints an empty memory, and
 everyone the user named has an entry under `entities:`.
 
 ## 6. ANCHOR
+
+The anchor lives in the instructions file loaded in **every** session —
+`~/.claude/CLAUDE.md` for Claude Code — not in a file under the document root
+nor in a one-line `@import` stub on the Desktop. A per-folder file only loads
+in sessions started there, and the write rule below is exactly the one that
+must hold everywhere: facts surface in sessions about something else. Merge
+any per-folder instruction file into the global one, remove the stubs, and
+leave `anchors:` unset — the check reads the global file by default.
 
 Audit the user's instruction files (CLAUDE.md, AGENTS.md…). Two kinds of lines:
 
@@ -149,8 +158,8 @@ Back up the original to `<workspace>/legacy/` before touching it. Mechanically
 check every pointer — each backticked path must resolve. Show the user the full
 diff before writing anything.
 
-Done when the instruction files hold process and pointers only, the backup
-exists, every pointer resolves, and the user approved the diff.
+Done when one global instructions file holds process and pointers only, the
+backup exists, every pointer resolves, and the user approved the diff.
 
 ## 7. FIRST SWEEP
 

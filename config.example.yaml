@@ -39,9 +39,10 @@ layout:
 # Instruction files that cite paths (CLAUDE.md, AGENTS.md…). route.py --learn
 # extracts every backticked path they mention and warns when one no longer
 # resolves — a dead pointer is a fact that left the instructions and arrived
-# nowhere.
-anchors:
-  - ~/CLAUDE.md
+# nowhere. Default when the key is absent: ~/.claude/CLAUDE.md, the file every
+# Claude Code session loads. List files only when yours live elsewhere.
+# anchors:
+#   - ~/AGENTS.md
 
 # Regexes that turn text into identifier CANDIDATES — validation decides.
 # Longest pattern wins first, so a 14-digit SIRET is not also harvested as a
