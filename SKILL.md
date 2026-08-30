@@ -1,7 +1,6 @@
 ---
 name: wikidoc
-description: Sort your documents into a corpus you can query.
-disable-model-invocation: true
+description: Sort your documents into a corpus you can query. Use when the user asks to sort, file, rename or dedupe documents, asks what a file is or where it belongs, or when a durable fact about the user, their entities, dossiers or correspondents surfaces and must be written to the wiki.
 ---
 
 No `config.yaml` in the workspace (`$WIKIDOC_HOME`, default `~/.wikidoc`)? Read [`SETUP.md`](SETUP.md), run it, come back here.
