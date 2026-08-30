@@ -26,7 +26,7 @@ One entry per selected file; each actor writes only its columns; empty columns a
 |---|---|---|
 | `path size mtime md5 ext pages text truncated prose needs_vision render ids dates doc_year duplicate_of known_as known_desc opaque error` | collect.py | ① |
 | `text lu` (needs_vision entries only) | vision agent | ② |
-| `triage why guards rule entity strength destination shadow` | route.py | ③ |
+| `triage why guards rule entity strength destination rule_tags shadow` | route.py | ③ |
 | `decision dst desc tags date_doc reviewed keeper` | decide agent | ④ |
 | `result final` | apply.py | ⑤ |
 
@@ -66,7 +66,7 @@ Done when every entry has a triage and no count surprises you. This verb only wr
 
 ## ④ Decide
 
-The `route` triage needs confirming, `propose` opening, `residual` eyes. Fill `decision` (`move|trash|tag|rename|none`), `dst` (trailing `/` files into that folder; anything else is the full path, which is how a rename is written), a `desc` that says something the filename does not, `tags`, `date_doc` (never invented), and `reviewed: "vision"` when you read the render this pass — the sensitive probe requires it before trashing a file whose text will not extract. On a duplicate, `keeper` names the copy that stays; with a byte-identical keeper — or one matching the same `sensitive: supersedable:` family in config — it is the only way a sensitive file is ever binned, and apply proves the survivor from disk before acting.
+The `route` triage needs confirming, `propose` opening, `residual` eyes. Fill `decision` (`move|trash|tag|rename|none`), `dst` (trailing `/` files into that folder; anything else is the full path, which is how a rename is written), a `desc` that says something the filename does not, `tags`, `date_doc` (never invented) — a rule that proposed tags left them in `rule_tags`, and a rule carrying tags but no destination is a `tag` decision, not a move, and `reviewed: "vision"` when you read the render this pass — the sensitive probe requires it before trashing a file whose text will not extract. On a duplicate, `keeper` names the copy that stays; with a byte-identical keeper — or one matching the same `sensitive: supersedable:` family in config — it is the only way a sensitive file is ever binned, and apply proves the survivor from disk before acting.
 
 Blocking questions go to the user during this step, at the moment they arise — never batched to the end. What stays unsettled is left undecided; Learn will record it.
 

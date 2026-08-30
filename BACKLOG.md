@@ -63,11 +63,13 @@ until someone picks them up.
    friction in practice (every Downloads invoice needing a click) justifies a
    per-inbox `allow_rules: true` escape hatch some day.
 
-9. **`route_entry` never copies a rule's `tags:` into the entry.** The field
-   exists in the grammar, `shadow_predictions` reports it and `score_shadows`
-   grades on it — but an active rule carrying only `tags:` (production has
-   two, kbis and bulletin-paie) applies nothing at all. Direction: propagate
-   tags into the routing columns, or drop it from the grammar.
+9. ~~**`route_entry` never copies a rule's `tags:` into the entry.**~~ Fixed
+   2026-08-30: `route_entry` writes a rule's `tags:` to a `rule_tags` column,
+   proposed the way `destination` is, and step ④ copies them into `tags`. A
+   tags-only rule also says so in its `why` (`tags only, nothing to move`), so
+   the decide step stops looking for a destination that was never there.
+   Still open in the same area: a rule with neither `destination:` nor `tags:`
+   is still triaged `route` while proposing nothing. None exists in practice.
 
 10. **The "10 passes at 0 hits" retirement is unreachable.** `rule_report`
     computes `passes = stored + (1 if rid in hits else 0)`, so a rule that

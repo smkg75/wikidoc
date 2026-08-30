@@ -232,7 +232,7 @@ def route_entry(e, cfg, mem=None):
         e["_entity"] = entity.get("bucket") or entity.get("name")
     cols = {"triage": None, "why": None, "guards": [], "rule": None,
             "entity": e.get("_entity"), "strength": None, "destination": None,
-            "shadow": shadow_predictions(e, cfg)}
+            "rule_tags": None, "shadow": shadow_predictions(e, cfg)}
 
     checks = []
     if e.get("known_as"):
@@ -277,6 +277,13 @@ def route_entry(e, cfg, mem=None):
         dest, missing = (render_destination(rule["destination"], e)
                          if rule.get("destination") else (None, None))
         cols["rule"], cols["strength"], cols["destination"] = rule["id"], strength, dest
+        # A rule may carry `tags:` with or without a destination. Propose them
+        # the way `destination` is proposed — step ④ copies them into `tags`,
+        # which is what score_shadows and the memory line read. Without this a
+        # tags-only rule matched, resolved to nothing, and still marked the file
+        # `route`: routed to an empty decision.
+        if rule.get("tags"):
+            cols["rule_tags"] = rule["tags"]
         if missing is not None:
             cols["triage"] = "propose"
             cols["why"] = f"destination variable unresolved: {missing}"
@@ -285,7 +292,8 @@ def route_entry(e, cfg, mem=None):
             cols["why"] = f"rule {rule['id']} matched on the path or filename alone"
         else:
             cols["triage"] = "route"
-            cols["why"] = f"rule {rule['id']} (evidence strength {strength})"
+            cols["why"] = (f"rule {rule['id']} (evidence strength {strength})"
+                           + ("" if dest else " — tags only, nothing to move"))
         return cols
 
     cols["triage"] = "residual"

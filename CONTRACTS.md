@@ -286,7 +286,11 @@ duplicate → inbox → entity tie; then rules. Strength graded on the branch th
 an empty match dict matches nothing. Destination rendering: always trailing
 `os.sep`; an unresolved variable ({doc_year} with no date) → the rule does
 not fire, entry goes `propose` with the variable named in `why` — never an
-`undated/` folder. All text matching through `memory.norm()`. No
+`undated/` folder. A rule's `tags:` go to `rule_tags`, proposed the way
+`destination` is: step ④ decides, and `tags` (which score_shadows and the
+memory line read) stays ④'s column. A rule may carry tags with no
+destination — its `why` says so, and the decision is `tag`, not a move.
+All text matching through `memory.norm()`. No
 `--dry-run` flag exists: this verb only writes columns in bench/; dry-run
 belongs to apply.py alone.
 
