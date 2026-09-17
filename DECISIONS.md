@@ -57,14 +57,35 @@ which is the pass's own vocabulary (`triage: route | propose | residual`).
 **`tidy`, not `audit`** · 2026-09-17
 `route.py --audit` and `--full-audit` already name the audit of a filing rule, and one word for two
 examinations would have sent a session to the wrong one. The name also had to promise what the
-command does: a small regular clean, examined first and applied on the user's pick, light enough
-for a weekly routine. Run hands-off it examines, writes its report under `logs/`, and applies
-nothing.
+command does: a small regular clean, light enough for a weekly routine.
 
-**The examination of `tidy` writes nothing** · 2026-09-17
-Findings first, with their proof, then the user's pick, then the clean. An examination that edits
-as it goes cannot be checked against the state it found, and a wiki is exactly the place where a
-confident wrong merge deletes the only copy of a fact.
+**`tidy` cleans alone, and the wiki is a git repository** · 2026-09-17
+The first version examined, then waited for the user's pick. The user's word: a clean that waits
+for a validation is an audit, and the person a wiki serves does not maintain it, the model does.
+So `tidy` examines, cleans and reports, and nothing waits on anyone. What makes that safe is
+versioning: `wiki/` is a local git repository with no remote, each tidy is one commit to read and
+revert, and the commit taken before it holds everything sessions wrote in silence since the last
+one. The same log gives the incremental scope, the diff since the last tidy, which is what keeps a
+weekly run cheap: a first full run measured around 600 K tokens, nearly all of it in the two
+families that read the long files.
+
+**A fact is settled by a dated replacement or by its source, never by recency** · 2026-09-17
+Measured on the first run: of the ten most severe findings, one was a false alarm and one could
+not be decided from the wiki alone. A clean that picked the most recent of two lines would have
+rewritten a filed figure on a guess. So a contradiction is settled by the source document, read,
+with the arbitration archived; what no source settles is recorded with what would settle it and
+becomes an open question. `decisions.md` and every dated archive are append-only, and anything
+outside the workspace belongs to the corpus.
+
+**The examiner re-reads every proof it is handed** · 2026-09-17
+Four of forty-two line numbers returned by the reading sub-agents were wrong on the first run. A
+finding whose quoted line is not where it was said to be is dropped.
+
+**Pointers are `[[links]]` and rooted paths** · 2026-09-17
+A wiki writes most of its paths as fragments relative to an unspoken root. Checked naively, 427 of
+452 backticked strings were "dead"; bounded to links and to absolute or `~/` paths, the family is
+nearly free and keeps its real findings. A path whose own line says it was binned or moved is a
+correct trace.
 
 ## Deferred
 

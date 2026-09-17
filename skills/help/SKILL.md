@@ -16,7 +16,7 @@ Print this, as is:
 setup     once per machine; config.yaml from the documents themselves, the wiki anchored, the inboxes swept     files
 tri       one filing pass: collect, read, route, decide, apply, learn                                         files
 wiki      answers from the wiki and writes to it; fires on its own when a fact is asked or surfaces           wiki
-tidy      the regular clean of the wiki and the workspace: findings first, then what the user approved        wiki
+tidy      the regular clean of the wiki, done alone: one git commit to read, the open questions named        wiki
 help      this flow, and where the workspace stands                                                           read-only
 ```
 

@@ -28,7 +28,7 @@ claude plugin install wikidoc@wikidoc
 | `/wikidoc:setup` | once per machine: config from your own documents, the wiki anchored, the inboxes swept |
 | `/wikidoc:tri` | one filing pass: collect, read, route, decide, apply, learn |
 | `/wikidoc:wiki` | answers from the wiki, finds a document, writes a fact down — fires on its own |
-| `/wikidoc:tidy` | the regular clean of the wiki: findings first, then what you approved |
+| `/wikidoc:tidy` | the regular clean of the wiki, done alone: one git commit you can read and revert, and the questions it could not settle |
 | `/wikidoc:help` | the flow, and where your workspace stands |
 
 ## 🚀 First run

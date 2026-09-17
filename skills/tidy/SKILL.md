@@ -1,49 +1,66 @@
 ---
 name: tidy
-description: The regular clean of the wiki and the workspace - examines first and returns findings with their proof, then applies what the user approved. Use when the user asks to tidy or clean up the wiki, or asks whether it is healthy, stale, bloated or contradicting itself.
+description: The regular clean of the wiki - examines it, cleans what the wiki or its sources settle, and reports what changed and what stays open. Runs alone, from a routine or on request. Use when the user asks to tidy or clean up the wiki, or asks whether it is healthy, stale, bloated or contradicting itself.
+argument-hint: "nothing for what changed since the last tidy, 'full' to read the whole wiki"
 ---
 
 # Tidy
 
-A small, regular clean in two halves, light enough to run every week. The examination reads the wiki, the ledger and the workspace and comes back with findings ranked by severity, touching nothing: an examination that edits as it goes cannot be checked against the state it found. Then the user picks, and the session cleans what was picked.
+The upkeep of the wiki, done alone: examine, clean, report. The user reads what changed afterwards; nothing waits on them. Three things make that safe. The wiki is a local git repository, so every clean is one commit the user can read and revert. The examination is finished before the first edit, so each finding is checked against the state it was found in. And a fact is only ever settled by the wiki's own dated replacement or by its source document, never by a guess: what neither settles stays, as an open question.
 
-This is the upkeep of the wiki. The audit of a filing rule is `route.py --audit` and `--full-audit`, in `skills/tri/SKILL.md`.
+The audit of a filing rule is another thing: `route.py --audit`, in `skills/tri/SKILL.md`.
 
 ## Step 0 — Load
 
-Resolve the workspace: `$WIKIDOC_HOME`, default `~/.wikidoc`. No `wiki/index.md`: stop on "Run `/wikidoc:setup` first". Read `index.md`, list every file under `wiki/` with its line count, and find the previous tidy line in `wiki/state.md` when one exists.
+Resolve the workspace: `$WIKIDOC_HOME`, default `~/.wikidoc`. No `wiki/index.md`: stop on "Run `/wikidoc:setup` first". Read `skills/wiki/SKILL.md`: its write rules bind every edit below.
 
-Done when: the index, the file list and the previous counts are in hand.
+`wiki/` is a git repository, local, with no remote. Absent: `git init` it. Commit whatever is uncommitted as `before tidy <date>`: that commit holds everything sessions wrote since the last tidy.
 
-## Step 1 — The families
+The scope: `$ARGUMENTS` is `full`, or no `tidy <date>` commit exists yet, and the whole wiki is read. Otherwise the scope is the diff since the last `tidy` commit: the changed hunks, and for each fact they carry, the other places in the wiki that speak of the same subject, found by search. List every file under `wiki/`, recursively, with its line count.
 
-Families 1, 2, 5 and 6 are mechanical: run them here. Families 3 and 4 read the long files in full: dispatch one sub-agent per family, in parallel, so those files stay out of this conversation. Each sub-agent receives the wiki path and its family, and returns facts: file, section, what was observed, the line quoted as proof. The verdict on each finding is rendered here.
+Done when: the `before` commit exists, the scope is a list of files and hunks, and the write rules are read.
 
-1. **Index** — a wiki file with no index line; an index line whose target is gone; a line past ~150 characters, or one that states the answer instead of naming the question.
-2. **Pointers** — a backticked path or a `[[link]]` in the wiki that resolves to nothing; the anchor in the instructions file, checked the same way.
-3. **Facts** — one fact carried by two files; a replaced fact still standing beside its replacement; a contradiction recorded without what would settle it.
-4. **State** — a dossier marked closed still listed as in flight; a deadline passed with no event after it; an open question already answered elsewhere in the wiki; history settled in `state.md` (reports of past passes, closed questions) that belongs in `logs/` or `decisions.md`.
-5. **Ledger** — a path whose last `memory.jsonl` line says it was filed and whose file is gone from that destination; the `unanswered` and `refused` lines and their age; a `bench/` left in the workspace.
-6. **Workshop** — backups piling up beside `config.yaml` and `memory.jsonl`, reports and stray files at the workspace root, each with its size and date.
+## Step 1 — Examine
 
-Done when: the six families have returned, or the one that broke is named.
+Families 1, 2, 5 and 6 are mechanical: run them here. Families 3 and 4 read long text: dispatch one sub-agent per family, in parallel, so that text stays out of this conversation. Each sub-agent is told it is read-only, receives the wiki path, the scope and its family, and returns per finding: file, section, line number, what was observed, the line quoted word for word, what would settle it. A finding that spans `state.md` and another file belongs to State. Re-read every quoted line at its number before using it: a proof that is not where it was said to be is dropped.
 
-## Step 2 — The findings
+1. **Index** — a wiki file with no index line; an index line whose target is gone, or that points at no file; a line past ~150 characters, or one that carries the fact instead of naming the question.
+2. **Pointers** — a `[[link]]`, or an absolute or `~/` path, that resolves to nothing. A path whose own line records it as binned, moved or deleted is a correct trace. A path fragment is resolved against the workspace and against `root`, and skipped when neither holds it. The anchor is the instructions file (`anchors:` in `config.yaml`, default `~/.claude/CLAUDE.md`): its pointers are checked the same way.
+3. **Facts** — two lines that contradict each other; a replaced fact still standing beside its replacement; the same fact with its detail in two files; one name under two spellings. A dated arbitration in `decisions.md` and the current rule in the file that owns it are two layers of one fact, by design.
+4. **State** — a dossier marked closed still listed as in flight; an open question the wiki answers elsewhere; a current-state line the disk contradicts; history settled in `state.md` or any file of current rules: reports of past passes, closed questions, the event-by-event journal of a dossier.
+5. **Ledger** — a path whose last `memory.jsonl` line leaves the file in place (`none`, `tag`, `keep`, or no decision) and whose file is gone; an `unanswered` or `refused` line older than 30 days; a `bench/` holding a `routing.json`, which is an interrupted pass, or an empty one, which is debris.
+6. **Workshop** — backups beside `config.yaml` and `memory.jsonl`, stray reports at the workspace root, and the weight of `logs/` by subfolder, each with size and date.
 
-Rank by severity: what would make the wiki give a wrong answer first (facts, pointers), what buries the current state second (state, index), what costs only tokens and disk third (ledger, workshop). Each finding: family, file and section or path, what was observed, the proof, the decision suggested, and ❓ where the wiki does not settle it.
+And one family that is reported, never cleaned — **Deadlines**: every date in `state.md` by which someone must act, passed or within 14 days, with the last event recorded on it.
 
-Done when: every finding has its five fields, and the list is rendered most severe first with the count per family against the previous counts.
+Done when: every family has returned or the one that broke is named, and every proof kept was re-read at its line.
 
-## Step 3 — Clean
+## Step 2 — Clean
 
-Run hands-off, from a routine with nobody at the keyboard: write the ranked list to `logs/tidy-<date>.md`, apply nothing, and go to Step 4, whose line points at that report. The next session opens on it.
+Each finding gets one of three fates.
 
-With the user present, put the list to them and take their pick: all, none, or the findings they name. Apply each approved decision under the write rules of `skills/wiki/SKILL.md`: a replaced fact is deleted where it lived, history moves to `logs/` or `decisions.md` whole, the index is brought back to one pointing line per file. A file that leaves the workspace goes to the OS bin. A finding marked ❓ is asked, one at a time, before anything is applied to it.
+**Cleaned**, when the wiki or a source settles it:
+- A replaced fact whose replacement is dated in the wiki: the old line is deleted where it lived.
+- A contradiction: find the source document (`memory.py find`, then read it) and keep what it proves; the arbitration goes to `decisions.md` with the source named.
+- A duplicated fact: it stays in the file that owns that kind of fact, the other place points at it.
+- History: it moves whole, in order, to `logs/tidy-<date>/` or under its date in `decisions.md`; the state keeps one current line per dossier.
+- The index: one pointing line per file.
+- A pointer to a moved target: re-pointed once the target is found on disk.
+- A current-state line the disk contradicts: rewritten from the disk.
+- Backups older than the latest of each file, and an empty `bench/`: to the OS bin.
 
-Done when: every approved finding is applied and re-read at its new place, and every other finding stands untouched.
+**Left as it is**, by rule: `decisions.md` and every dated archive are append-only, a dead link inside a dated entry is history. Anything outside the workspace belongs to the corpus and to `tri`. A report the wiki cites stays where it is cited. `logs/` of past passes are archives.
 
-## Step 4 — Record
+**Open**, when neither the wiki nor a source settles it, or the decision is the user's: the contradiction is recorded at the fact's place with what would settle it, and the question goes to `state.md`, one line.
 
-One dated line in `wiki/state.md`: `tidy`, the count per family, how many were applied, and the report when one was written. It replaces the previous tidy line.
+Edit file by file, surgically, and re-read each edit at its place.
 
-Done when: the line is written.
+Done when: every finding has its fate, and `git diff` shows only edits a finding accounts for.
+
+## Step 3 — Report and record
+
+Commit as `tidy <date>`. Write `logs/tidy-<date>.md` in the wiki's language, under a hundred lines: the deadlines first; then what was cleaned, one line each; what stays open, one line each with what would settle it; the count per family against the previous tidy, or "first run". In `wiki/state.md`, where the current facts are kept, one line under 150 characters replaces the previous tidy line: date, cleaned, open, the report's path. The history of tidies is the git log.
+
+With the user present, close on the deadlines and the open questions, and on how to read the change: `git -C <wiki> show`.
+
+Done when: the commit exists, the report is written, and the state line points at it.
