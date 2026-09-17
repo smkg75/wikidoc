@@ -76,7 +76,7 @@ until someone picks them up.
     never matches never increments `passes`, and
     `passes >= dead_after_passes and h == 0` can never fire. Nothing retires
     a diverging rule either — only `cycle > max_cycles` does, and cycles are
-    bumped by hand. SKILL.md promises an automatic retirement the code cannot
+    bumped by hand. skills/tri/SKILL.md promises an automatic retirement the code cannot
     produce. Direction: increment `passes` for every rule evaluated, not only
     for those that matched.
 
@@ -94,7 +94,7 @@ until someone picks them up.
 12. **The miner's counter-sample is the pass, not the corpus.** `others` is
     built from the pass's own textual entries (248 in the measured pass) while
     the corpus held 3 860 — "unique among 248" is not "discriminating among
-    thousands". SKILL.md ⑥ warns the agent about this; the miner itself does
+    thousands". skills/tri/SKILL.md ⑥ warns the agent about this; the miner itself does
     not know it. Direction: widen the counter-sample to `memory.jsonl`'s
     descriptions, as branch 4 already does for identifiers.
 

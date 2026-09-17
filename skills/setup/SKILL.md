@@ -1,13 +1,18 @@
+---
+name: setup
+description: One-time onboarding - probes the machine, surveys the documents, grills the user, writes config.yaml, anchors the wiki in the instructions file, runs the first pass over the inboxes. Use when the workspace has no config.yaml yet, or the user asks to set up wikidoc.
+---
+
 # Setup
 
-Read once in the life of an installation, then never again — which is why it is
-not in `SKILL.md`.
+Run once in the life of an installation.
 
 The output: a `config.yaml` filled from evidence found in the user's own
 documents, instruction files that point at the wiki instead of duplicating it,
 and a first real pass already run over every configured inbox. Work in
-`$WIKIDOC_HOME` (default `~/.wikidoc`); create it if missing. Invoke scripts by
-absolute path from the skill directory, as `SKILL.md` says.
+`$WIKIDOC_HOME` (default `~/.wikidoc`); create it if missing. Scripts live in
+`scripts/` at the plugin root (`scripts/` sits beside `skills/`, two levels up
+from this file); invoke them by absolute path.
 
 ## 1. PROBE
 
@@ -168,8 +173,8 @@ files select ahead of the rest — so run `collect.py N` with N = the SUM of the
 file counts of ALL the inboxes in `inboxes:`, not just Desktop + Downloads.
 GRILL routinely surfaces a third inbox, and a sweep sized on two of them
 starves the rest in silence; collect.py prints selected/remaining counts per
-inbox — check that no inbox was left behind before going on. Full machinery,
-nothing weakened: Vision on every unread scan, Route, Decide with the user
+inbox — check that no inbox was left behind before going on. Full machinery
+of `skills/tri/SKILL.md`, nothing weakened: Vision on every unread scan, Route, Decide with the user
 answering blocking questions as they arise, the Apply dry-run read together,
 then `--execute`.
 

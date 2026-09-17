@@ -1,13 +1,16 @@
 ---
-name: wikidoc
-description: Sort your documents into a corpus you can query. Use when the user asks to sort, file, rename or dedupe documents, asks what a file is or where it belongs, or when a durable fact about the user, their entities, dossiers or correspondents surfaces and must be written to the wiki.
+name: tri
+description: Runs one filing pass over the documents - collect, read, route, decide, apply, learn. Use when the user asks to sort, file, rename or dedupe documents, or asks where a file belongs.
+argument-hint: "nothing for the next batch, 'inboxes' to size the pass on the inboxes alone, or a batch size"
 ---
 
-No `config.yaml` in the workspace (`$WIKIDOC_HOME`, default `~/.wikidoc`)? Read [`SETUP.md`](SETUP.md), run it, come back here.
+No `config.yaml` in the workspace (`$WIKIDOC_HOME`, default `~/.wikidoc`)? Follow `skills/setup/SKILL.md` at the plugin root, then come back here.
+
+`$ARGUMENTS` sizes the pass: nothing takes `batch_size`; a number is the batch size; `inboxes` is the sum of the file counts of every inbox in `inboxes:`, so the selection order fills the pass with them alone.
 
 Filing is the means; a corpus that answers questions is the end. Every pass ends with each file carrying what it is, and `memory.jsonl` carrying why that was decided. Query it anytime: `memory.py stats` · `show <path|md5>` · `find <term>` — memory answers, it never selects.
 
-Scripts live in `scripts/`, next to this file. Resolve this file's directory once and invoke every script by its **absolute path** (`python3 <skill-dir>/scripts/route.py`) — a relative invocation from the wrong cwd fails halfway through a pass. Long output goes to `bench/logs/`; read it paginated rather than re-running a script to see it again.
+Scripts live in `scripts/` at the plugin root (`scripts/` sits beside `skills/`, two levels up from this file). Resolve that directory once and invoke every script by its **absolute path** (`python3 <plugin-root>/scripts/route.py`) — a relative invocation from the wrong cwd fails halfway through a pass. Long output goes to `bench/logs/`; read it paginated rather than re-running a script to see it again.
 
 ## Invariants
 
@@ -108,10 +111,4 @@ Retired after 3 failed cycles, or 10 passes at 0 hits. A rule that keeps divergi
 
 ## The wiki
 
-`wiki/` holds what the corpus cannot say about itself: who is who, which entity was live in which period, which arbitration was made and why. `context.md` carries the durable facts; `state.md` carries what the next session must pick up. Start there.
-
-It is also written outside a pass, and outside this skill: a durable fact established while answering any question belongs in `wiki/` at that moment — `context.md`, `decisions.md`, `filing-patterns.md`, `trash-criteria.md`, `state.md` — with its line in `wiki/index.md` updated, surgically, section by section. A fact re-derived from the corpus for the third time is a wiki line that was never written. That writing is not a pass: it appends nothing to `memory.jsonl`, which records gestures on files alone.
-
-`index.md` is a table of contents, not a digest. One line per file — `- [name](file.md) — what it answers` — and the hook names the question the file settles, never the answer to it. **Never restate in the index a fact the target file carries**: two places then own one fact, the index costs the price of both, and neither defers to the other. Past ~150 characters a line has stopped pointing and started summarising; that is the bound, and it is the whole discipline.
-
-**A replaced fact is deleted where it lived.** What replaces it takes its place, and the arbitration that moved it goes to `decisions.md` — that is the trace it leaves. A superseded fact left standing is a second answer to a settled question with nothing marking it stale, and the reader cannot tell which of the two is current. Only a contradiction you cannot settle stays: recorded WITH its contradiction and with what would settle it, in the file, never in the index.
+`wiki/` holds what the corpus cannot say about itself: who is who, which entity was live in which period, which arbitration was made and why. A pass starts by reading `context.md` and `state.md`, and ends by writing its leftovers into `state.md`. How the wiki is read and written is `skills/wiki/SKILL.md`'s to say, and a pass follows it.

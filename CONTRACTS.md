@@ -3,7 +3,7 @@
 The reference the code is built against, and the memory of why it is built
 that way: interfaces first, then the production incidents that shaped them.
 When code and contract disagree, one of the two is a bug — report it, never
-deviate silently. What the agent does during a pass is `SKILL.md`'s to say;
+deviate silently. What the agent does during a pass is `skills/tri/SKILL.md`'s to say;
 this file states what the scripts guarantee, and repeats nothing the runtime
 files already carry. Deferred work lives in [`BACKLOG.md`](BACKLOG.md).
 
@@ -29,7 +29,7 @@ reading a document, writing a desc, deciding — belongs to agents.
 
 ## The scripts are optional; the record is not
 
-The hand-filing protocol is the SKILL.md invariant of the same name — what a
+The hand-filing protocol is the skills/tri/SKILL.md invariant of the same name — what a
 hand gesture owes (`Memory.record(...)`, `triage: "propose"`, a `reason` that
 says why, written after the destination is re-stat'ed) lives there and only
 there. Two contract-side additions: `provenance` names WHO judged, not just
@@ -46,10 +46,10 @@ undecided — its absence from memory IS the open question, and it belongs in
 ## Vocabulary
 
 - **triage** — where a file lands after route.py: `route` · `propose` ·
-  `residual` · `skip` (glosses in SKILL.md ③). JSON field `triage`; migrated
+  `residual` · `skip` (glosses in skills/tri/SKILL.md ③). JSON field `triage`; migrated
   records use `level` — readers accept both, writers emit only `triage`.
 - **evidence strength** — the 3/2/1 scale and the strength-1 cap:
-  SKILL.md Invariants.
+  skills/tri/SKILL.md Invariants.
 - **bench/** — the pass's working directory inside the workspace. Archived to
   `logs/<pass>/` at the end of a pass, never rmtree'd.
 - **unanswered** — a selected file that reached the end of a pass without a
@@ -177,9 +177,9 @@ config taxonomy.
 
 One entry per selected file. Each pipeline actor writes ONLY its columns;
 writes are atomic (temp file + rename). Empty columns = remaining work.
-The column table — who writes what, at which step — lives in `SKILL.md`
+The column table — who writes what, at which step — lives in `skills/tri/SKILL.md`
 and only there: it drifted the moment it existed twice. So do `lu`, the
-reader ladder, withdrawal and the answered-withdrawal path (SKILL.md ②).
+reader ladder, withdrawal and the answered-withdrawal path (skills/tri/SKILL.md ②).
 Two contract details: apply records `propose` in the memory line when a
 user-decided entry's triage column is empty; and the last rung before a
 withdrawal is recorded is asking the user — an unreadable file is a
@@ -215,7 +215,7 @@ outside the tree; treating `inboxes:` as a priority band only is how the
 tool once shipped with two inboxes that reported `candidates: 0` forever.
 Nested inboxes fold into the root that covers them: no file is scanned
 twice. Config excludes match relative to the walk root that found the file.
-Candidate definition, selection order and batch size are SKILL.md ①'s;
+Candidate definition, selection order and batch size are skills/tri/SKILL.md ①'s;
 the contract detail is the re-check — a (size, mtime) change triggers an
 md5 comparison: same content = moved, recorded as `known_as`; new content =
 candidate.
@@ -277,11 +277,11 @@ whose harness cannot read the original directly.
 
 **Default verb** — fills the triage columns of every entry. The vision
 barrier and its exemptions (known_as, withdrawals, user-decided entries)
-are SKILL.md ③'s; the contract details: the barrier condition is
+are skills/tri/SKILL.md ③'s; the contract details: the barrier condition is
 `needs_vision: true` AND empty `text` AND no decision, exit 2 with the
 paths listed. Shadow predictions computed BEFORE guards (guards must not
 blind learning). Guard order: skip (known md5) → settled (a
-hand-made line already placed this file — SKILL.md ③) → sensitive →
+hand-made line already placed this file — skills/tri/SKILL.md ③) → sensitive →
 duplicate → inbox → entity tie; then rules. Strength graded on the branch that MATCHED;
 an empty match dict matches nothing. Destination rendering: always trailing
 `os.sep`; an unresolved variable ({doc_year} with no date) → the rule does
@@ -321,16 +321,16 @@ belongs to apply.py alone.
 **Rule-craft, `--learn` included, runs in a subagent** — the protocol and
 the two traps it must be told (a rule mined in the pass's own context
 matches the pass, not the corpus; `--audit` tests text conditions against
-recorded descs, not documents) are SKILL.md ⑥'s, with the measurement that
+recorded descs, not documents) are skills/tri/SKILL.md ⑥'s, with the measurement that
 justifies them.
 
 **`--audit <rule-id>`** and **`--full-audit <rule-id>`** — semantics, the
-desc-only caveat and the promotion requirement are SKILL.md's ("Rules",
+desc-only caveat and the promotion requirement are skills/tri/SKILL.md's ("Rules",
 steps 1-2). Contract details: `--full-audit` announces the candidate count
 BEFORE extracting any content, and writes every file the rule would touch,
 with its rendered destination, to stdout + `logs/full-audit-<rule-id>.json`.
 
-Rule lifecycle and field shape: SKILL.md ("Rules: born shadow, promoted by
+Rule lifecycle and field shape: skills/tri/SKILL.md ("Rules: born shadow, promoted by
 the user") and the annotated `rules:` block of config.example.yaml are the
 sources of truth — this file adds nothing to them.
 
@@ -405,7 +405,7 @@ an empty document — a 40 000-character export filed as blank. Readers return
 None for "could not read"; only a real emptiness is "".
 
 **A refusal is recorded, and it is not a withdrawal.** The mechanics are
-SKILL.md ⑤'s; `--learn` lists it under `refused`, never `unanswered`.
+skills/tri/SKILL.md ⑤'s; `--learn` lists it under `refused`, never `unanswered`.
 Recording it as `unanswered` (what shipped first) erased both the decision
 and the guard: the next pass met a file that looked as if nobody had ever
 read it, and proposed the same refused gesture again.
@@ -426,7 +426,7 @@ directory.
 
 The whole repo is public — `tests/`, `CONTRACTS.md` and `BACKLOG.md`
 included, published for contributors. What the *skill* loads at runtime is
-only `SKILL.md`, `SETUP.md`, `config.example.yaml` and `scripts/`; the rest
+only `skills/`, `config.example.yaml` and `scripts/`; the rest
 is development material and never appears in a pass.
 
 Cleanliness is a hard rule for every file:
@@ -470,7 +470,7 @@ being wrong is expensive (the corpus), model-driven where judgement matters
 - **Sensitive duplicates are reducible, under proof.** Byte-identical
   copies of a sensitive document both land `propose` (duplicate + sensitive
   guards). A trash on one is refused UNLESS the entry names a `keeper` —
-  the re-hash proof is SKILL.md's invariant, plus two contract details: the
+  the re-hash proof is skills/tri/SKILL.md's invariant, plus two contract details: the
   keeper must differ from the source, and a proven keeper lifts the
   unreadable-text refusal too, since neither describes a risk once the same
   bytes survive.

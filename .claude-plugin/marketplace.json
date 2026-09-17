@@ -1,0 +1,15 @@
+{
+  "name": "wikidoc",
+  "owner": {
+    "name": "smkg75"
+  },
+  "plugins": [
+    {
+      "name": "wikidoc",
+      "source": "./",
+      "version": "0.1.1",
+      "description": "Sorts your documents into a corpus you can query, and keeps the wiki that says what the corpus cannot say about itself",
+      "license": "MIT"
+    }
+  ]
+}

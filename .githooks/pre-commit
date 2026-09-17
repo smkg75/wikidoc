@@ -1,0 +1,11 @@
+#!/bin/sh
+# Bumps the plugin patch version on every commit, so `claude plugin update` picks up the new copy.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+cur=$(sed -n 's/.*"version": *"\([0-9]*\.[0-9]*\.[0-9]*\)".*/\1/p' .claude-plugin/plugin.json | head -1)
+new=$(echo "$cur" | awk -F. '{print $1"."$2"."$3+1}')
+for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+  sed "s/\"version\": *\"$cur\"/\"version\": \"$new\"/" "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  git add "$f"
+done
+echo "version $cur -> $new"

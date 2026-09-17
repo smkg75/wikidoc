@@ -206,7 +206,7 @@ def load_config(ws=None):
 def require_config(ws=None):
     cfg = load_config(ws)
     if cfg is None:
-        sys.exit("no config.yaml in %s — read SETUP.md and run the bootstrap"
+        sys.exit("no config.yaml in %s — run /wikidoc:setup first"
                  % (ws or workspace()))
     return cfg
 

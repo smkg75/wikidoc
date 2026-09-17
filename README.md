@@ -13,9 +13,27 @@ what each one is. Once that's done, you stop digging through folders, you ask.
 - 📮 **Forwarding receipts.** Supplier invoices found and sent to your accounting inbox without opening a folder.
 - 🧠 **Giving an assistant real context.** An LLM that knows which company existed when, who you worked with, and what you decided — because it's all written down.
 
+## 📥 Install
+
+```bash
+git clone https://github.com/smkg75/wikidoc
+claude plugin marketplace add ./wikidoc
+claude plugin install wikidoc@wikidoc
+```
+
+## 🧭 Commands
+
+| Command | What it does |
+|---|---|
+| `/wikidoc:setup` | once per machine: config from your own documents, the wiki anchored, the inboxes swept |
+| `/wikidoc:tri` | one filing pass: collect, read, route, decide, apply, learn |
+| `/wikidoc:wiki` | answers from the wiki, finds a document, writes a fact down — fires on its own |
+| `/wikidoc:tidy` | the regular clean of the wiki: findings first, then what you approved |
+| `/wikidoc:help` | the flow, and where your workspace stands |
+
 ## 🚀 First run
 
-No config yet? It sets itself up:
+No config yet? `/wikidoc:setup` does it:
 
 1. Checks what your machine can do.
 2. Reads a sample of your documents: company IDs, dates, who keeps sending you things.
@@ -42,7 +60,7 @@ kind of document doesn't need thinking about twice.
 
 | Place | Holds |
 |---|---|
-| **the skill** | the steps and the scripts — the same for everyone |
+| **the plugin** | the commands and the scripts — the same for everyone |
 | **your workspace** | `config.yaml` · `memory.jsonl` · `logs/` · `wiki/` — yours, in plain text |
 
 The workspace is where your setup, your history and everything the agent learned
@@ -67,8 +85,10 @@ You add a rule when you've decided the same thing twice, not before.
 ## 🛠️ Development
 
 Interfaces and incident memory live in [`CONTRACTS.md`](CONTRACTS.md);
-deferred work in [`BACKLOG.md`](BACKLOG.md). The skill itself loads only
-`SKILL.md`, `SETUP.md`, `config.example.yaml` and `scripts/`.
+why the plugin is shaped this way in [`DECISIONS.md`](DECISIONS.md); deferred
+work in [`BACKLOG.md`](BACKLOG.md). At runtime the plugin loads only `skills/`,
+`config.example.yaml` and `scripts/`. After cloning, enable the version hook:
+`git config core.hooksPath .githooks`.
 
 ## 💸 Token costs
 

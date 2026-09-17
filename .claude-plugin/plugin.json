@@ -1,0 +1,12 @@
+{
+  "name": "wikidoc",
+  "description": "Sorts your documents into a corpus you can query, and keeps the wiki that says what the corpus cannot say about itself",
+  "version": "0.1.1",
+  "author": {
+    "name": "smkg75",
+    "url": "https://github.com/smkg75"
+  },
+  "repository": "https://github.com/smkg75/wikidoc",
+  "license": "MIT",
+  "keywords": ["documents", "filing", "wiki", "knowledge-base", "dedupe", "personal-admin"]
+}
