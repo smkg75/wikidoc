@@ -85,6 +85,15 @@ written in two tenses: appended to `log.md`, which is never rewritten, and folde
 current line its dossier keeps in `state.md`. This is the append-only log of the LLM-wiki pattern
 this plugin follows, and `tidy` logs its own passes there too.
 
+**Four fates, and what the first autonomous run taught** · 2026-09-17
+The first clean that ran alone was read back commit against sources: every fact it changed was
+backed by a document or a dated replacement, and no line of moved history was lost. It also met
+cases the three fates did not name, now written in: a finding whose proof falls on re-reading is
+dropped and named; two lines that contradict each other can both be true of two different things,
+and the fix is a sentence of distinction; a dated entry that is the evidence of a rule stays with
+its rule; a backup the wiki cites stays; the ledger is reported, never edited; tidy's open
+questions live under one heading that each run rewrites.
+
 **The examiner re-reads every proof it is handed** · 2026-09-17
 Four of forty-two line numbers returned by the reading sub-agents were wrong on the first run. A
 finding whose quoted line is not where it was said to be is dropped.

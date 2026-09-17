@@ -37,21 +37,23 @@ Done when: every family has returned or the one that broke is named, and every p
 
 ## Step 2 — Clean
 
-Each finding gets one of three fates.
+Each finding gets one of four fates.
 
 **Cleaned**, when the wiki or a source settles it:
 - A replaced fact whose replacement is dated in the wiki: the old line is deleted where it lived.
-- A contradiction: find the source document (`memory.py find`, then read it) and keep what it proves; the arbitration goes to `decisions.md` with the source named.
+- A contradiction: find the source document (`memory.py find`, then read it) and keep what it proves; the arbitration goes to `decisions.md` with the source named. When the source shows both lines true of two different things, both stay and one sentence says what each of them names. A wrong fact the source reveals in passing is corrected the same way, and counted.
 - A duplicated fact: it stays in the file that owns that kind of fact, the other place points at it.
-- History: it moves whole to `log.md`, placed in date order, and the state keeps one current line per dossier. No `log.md` yet: create it, with its index line. Count the lines taken out against the lines laid down.
+- History: it moves whole to `log.md`, word for word under dated headings in date order, and the state keeps one current line per dossier. A dated entry that is the evidence of a rule stays with its rule: only history with no rule attached leaves. No `log.md` yet: create it, with its index line. Count the lines taken out against the lines laid down.
 - The index: one pointing line per file.
 - A pointer to a moved target: re-pointed once the target is found on disk.
 - A current-state line the disk contradicts: rewritten from the disk.
-- Backups older than the latest of each file, and an empty `bench/`: to the OS bin.
+- Backups older than the latest of each file, unless the wiki cites them, and an empty `bench/`: to the OS bin.
 
-**Left as it is**, by rule: `decisions.md`, `log.md` and every dated archive are append-only, a dead link inside a dated entry is history. Anything outside the workspace belongs to the corpus and to `tri`. A report the wiki cites stays where it is cited. `logs/` of past passes are archives.
+**Left as it is**, by rule: `decisions.md`, `log.md` and every dated archive are append-only, a dead link inside a dated entry is history. Anything outside the workspace belongs to the corpus and to `tri`. A file the wiki cites stays where it is cited. `logs/` of past passes are archives. `memory.jsonl` is the pass's to write: Ledger findings are reported, like the deadlines.
 
-**Open**, when neither the wiki nor a source settles it, or the decision is the user's: the contradiction is recorded at the fact's place with what would settle it, and the question goes to `state.md`, one line.
+**Open**, when neither the wiki nor a source settles it, or the decision is the user's: the contradiction is recorded at the fact's place with what would settle it, and the question goes to `state.md`, one line, under the one heading that holds tidy's questions. Each tidy rewrites that heading: the answered leave, the rest carry over.
+
+**Dropped**, when the proof does not hold on re-reading: named in the report with the reason, so the next examination does not raise it again.
 
 Edit file by file, surgically, and re-read each edit at its place.
 
