@@ -7,7 +7,7 @@
     {
       "name": "wikidoc",
       "source": "./",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "description": "Sorts your documents into a corpus you can query, and keeps the wiki that says what the corpus cannot say about itself",
       "license": "MIT"
     }
