@@ -147,7 +147,9 @@ established by digging — an identifier, a surface, a correspondent, a
 reference amount, an arbitration — is written to `wiki/` the moment it
 surfaces, into `context.md` (durable facts), `decisions.md` (dated
 arbitrations), `filing-patterns.md` / `trash-criteria.md` (observed
-destinations and removal criteria) or `state.md` (what stayed unanswered),
+destinations and removal criteria), `log.md` (dated events, appended) or
+`state.md` (the present: one line per dossier in flight, what stayed
+unanswered),
 then its line in `wiki/index.md` is updated — a fact absent from the index is
 invisible. Writing is surgical: complete the existing section, never rewrite
 the file; contradicting sources are recorded WITH the contradiction and what

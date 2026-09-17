@@ -5,7 +5,7 @@ description: Reads and writes the wiki of the document corpus. Use when a questi
 
 # Wiki
 
-`$WIKIDOC_HOME/wiki/` (default `~/.wikidoc/wiki/`) holds what the corpus cannot say about itself: who is who, which entity was live in which period, which arbitration was made and why. `context.md` carries the durable facts, `decisions.md` the dated arbitrations, `state.md` what is in flight and what the next session must pick up, `filing-patterns.md` and `trash-criteria.md` the observed destinations and removal criteria. A wiki grows the files its owner needs; `index.md` names them all.
+`$WIKIDOC_HOME/wiki/` (default `~/.wikidoc/wiki/`) holds what the corpus cannot say about itself: who is who, which entity was live in which period, which arbitration was made and why. `context.md` carries the durable facts, `decisions.md` the dated arbitrations, `state.md` the present — one current line per dossier in flight, and the open questions — `log.md` the chronicle of what happened and when, `filing-patterns.md` and `trash-criteria.md` the observed destinations and removal criteria. A wiki grows the files its owner needs; `index.md` names them all.
 
 No `wiki/index.md`: stop on "Run `/wikidoc:setup` first".
 
@@ -26,6 +26,8 @@ Done when the path handed to the user has been re-stat'ed on disk.
 ## Write
 
 The wiki is written in any session, the moment the fact surfaces: a durable fact established while answering any question, or an event that changes the state of a dossier (sent, received, signed, refused, decided, filed). It goes to the file that owns that kind of fact, then its line in `index.md` is updated, surgically, section by section: complete the existing section, keep the rest of the file as it stands. A fact re-derived from the corpus for the third time is a wiki line that was never written. That writing is not a pass: it appends nothing to `memory.jsonl`, which records gestures on files alone.
+
+An event is written twice, once in each tense. `log.md` gets the past: one line appended at the end, opening on the ISO date and the dossier's name so the log greps by either, and nothing in it is ever rewritten. `state.md` gets the present: the dossier's line is rewritten to where things stand now, who awaits whom, and the next deadline. A state line that grows a second sentence of history is a log entry in the wrong file.
 
 `index.md` is a table of contents, not a digest. One line per file — `- [name](file.md) — what it answers` — and the hook names the question the file settles, never the answer to it. **Never restate in the index a fact the target file carries**: two places then own one fact, the index costs the price of both, and neither defers to the other. Past ~150 characters a line has stopped pointing and started summarising; that is the bound, and it is the whole discipline.
 

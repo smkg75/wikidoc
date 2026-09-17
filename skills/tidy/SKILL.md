@@ -27,7 +27,7 @@ Families 1, 2, 5 and 6 are mechanical: run them here. Families 3 and 4 read long
 1. **Index** — a wiki file with no index line; an index line whose target is gone, or that points at no file; a line past ~150 characters, or one that carries the fact instead of naming the question.
 2. **Pointers** — a `[[link]]`, or an absolute or `~/` path, that resolves to nothing. A path whose own line records it as binned, moved or deleted is a correct trace. A path fragment is resolved against the workspace and against `root`, and skipped when neither holds it. The anchor is the instructions file (`anchors:` in `config.yaml`, default `~/.claude/CLAUDE.md`): its pointers are checked the same way.
 3. **Facts** — two lines that contradict each other; a replaced fact still standing beside its replacement; the same fact with its detail in two files; one name under two spellings. A dated arbitration in `decisions.md` and the current rule in the file that owns it are two layers of one fact, by design.
-4. **State** — a dossier marked closed still listed as in flight; an open question the wiki answers elsewhere; a current-state line the disk contradicts; history settled in `state.md` or any file of current rules: reports of past passes, closed questions, the event-by-event journal of a dossier.
+4. **State** — a dossier marked closed still listed as in flight; an open question the wiki answers elsewhere; a current-state line the disk contradicts; history settled in `state.md` or any file of current rules, which belongs in `log.md`: reports of past passes, closed questions, the event-by-event journal of a dossier.
 5. **Ledger** — a path whose last `memory.jsonl` line leaves the file in place (`none`, `tag`, `keep`, or no decision) and whose file is gone; an `unanswered` or `refused` line older than 30 days; a `bench/` holding a `routing.json`, which is an interrupted pass, or an empty one, which is debris.
 6. **Workshop** — backups beside `config.yaml` and `memory.jsonl`, stray reports at the workspace root, and the weight of `logs/` by subfolder, each with size and date.
 
@@ -43,13 +43,13 @@ Each finding gets one of three fates.
 - A replaced fact whose replacement is dated in the wiki: the old line is deleted where it lived.
 - A contradiction: find the source document (`memory.py find`, then read it) and keep what it proves; the arbitration goes to `decisions.md` with the source named.
 - A duplicated fact: it stays in the file that owns that kind of fact, the other place points at it.
-- History: it moves whole, in order, to `logs/tidy-<date>/` or under its date in `decisions.md`; the state keeps one current line per dossier.
+- History: it moves whole to `log.md`, placed in date order, and the state keeps one current line per dossier. No `log.md` yet: create it, with its index line. Count the lines taken out against the lines laid down.
 - The index: one pointing line per file.
 - A pointer to a moved target: re-pointed once the target is found on disk.
 - A current-state line the disk contradicts: rewritten from the disk.
 - Backups older than the latest of each file, and an empty `bench/`: to the OS bin.
 
-**Left as it is**, by rule: `decisions.md` and every dated archive are append-only, a dead link inside a dated entry is history. Anything outside the workspace belongs to the corpus and to `tri`. A report the wiki cites stays where it is cited. `logs/` of past passes are archives.
+**Left as it is**, by rule: `decisions.md`, `log.md` and every dated archive are append-only, a dead link inside a dated entry is history. Anything outside the workspace belongs to the corpus and to `tri`. A report the wiki cites stays where it is cited. `logs/` of past passes are archives.
 
 **Open**, when neither the wiki nor a source settles it, or the decision is the user's: the contradiction is recorded at the fact's place with what would settle it, and the question goes to `state.md`, one line.
 
@@ -59,8 +59,8 @@ Done when: every finding has its fate, and `git diff` shows only edits a finding
 
 ## Step 3 — Report and record
 
-Commit as `tidy <date>`. Write `logs/tidy-<date>.md` in the wiki's language, under a hundred lines: the deadlines first; then what was cleaned, one line each; what stays open, one line each with what would settle it; the count per family against the previous tidy, or "first run". In `wiki/state.md`, where the current facts are kept, one line under 150 characters replaces the previous tidy line: date, cleaned, open, the report's path. The history of tidies is the git log.
+Write `logs/tidy-<date>.md` in the wiki's language, under a hundred lines: the deadlines first; then what was cleaned, one line each; what stays open, one line each with what would settle it; the count per family against the previous tidy, or "first run". Append one line to `wiki/log.md`: the date, `tidy`, cleaned, open, the report's path. The previous counts are read from the previous report.
 
-With the user present, close on the deadlines and the open questions, and on how to read the change: `git -C <wiki> show`.
+Then commit as `tidy <date>`. With the user present, close on the deadlines and the open questions, and on how to read the change: `git -C <wiki> show`.
 
-Done when: the commit exists, the report is written, and the state line points at it.
+Done when: the report is written, the log line points at it, and the `tidy <date>` commit holds both.

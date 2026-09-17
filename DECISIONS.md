@@ -77,6 +77,14 @@ with the arbitration archived; what no source settles is recorded with what woul
 becomes an open question. `decisions.md` and every dated archive are append-only, and anything
 outside the workspace belongs to the corpus.
 
+**Events go to `log.md`, the state keeps the present** · 2026-09-17
+The write rule sent every event to `state.md`, and measured on a real wiki half of that file had
+become history: reports of closed passes, closed questions, dossiers whose line had grown into a
+twenty-line journal. A clean could empty it, and the rule would fill it again. So an event is
+written in two tenses: appended to `log.md`, which is never rewritten, and folded into the one
+current line its dossier keeps in `state.md`. This is the append-only log of the LLM-wiki pattern
+this plugin follows, and `tidy` logs its own passes there too.
+
 **The examiner re-reads every proof it is handed** · 2026-09-17
 Four of forty-two line numbers returned by the reading sub-agents were wrong on the first run. A
 finding whose quoted line is not where it was said to be is dropped.
