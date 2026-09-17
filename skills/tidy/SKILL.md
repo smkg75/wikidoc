@@ -29,7 +29,7 @@ Families 1, 2, 5 and 6 are mechanical: run them here. Families 3 and 4 read long
 3. **Facts** — two lines that contradict each other; a replaced fact still standing beside its replacement; the same fact with its detail in two files; one name under two spellings. A dated arbitration in `decisions.md` and the current rule in the file that owns it are two layers of one fact, by design.
 4. **State** — a dossier marked closed still listed as in flight; an open question the wiki answers elsewhere; a current-state line the disk contradicts; history settled in `state.md` or any file of current rules, which belongs in `log.md`: reports of past passes, closed questions, the event-by-event journal of a dossier.
 5. **Ledger** — a path whose last `memory.jsonl` line leaves the file in place (`none`, `tag`, `keep`, or no decision) and whose file is gone; an `unanswered` or `refused` line older than 30 days; a `bench/` holding a `routing.json`, which is an interrupted pass, or an empty one, which is debris.
-6. **Workshop** — backups beside `config.yaml` and `memory.jsonl`, and the weight of `logs/` by subfolder, each with size and date. Everything else in the workspace is the user's: their notes, reports and scripts live there by right.
+6. **Workshop** — backups beside `config.yaml` and `memory.jsonl`, and the weight of `logs/` by subfolder, each with size and date. A chronicle or a report a session left at the workspace root: the chronicle belongs in `log.md`, the report in `logs/`.
 
 And one family that is reported, never cleaned — **Deadlines**: every date in `state.md` by which someone must act, passed or within 14 days, with the last event recorded on it.
 

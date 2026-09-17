@@ -104,6 +104,12 @@ A wiki writes most of its paths as fragments relative to an unspoken root. Check
 nearly free and keeps its real findings. A path whose own line says it was binned or moved is a
 correct trace.
 
+**A pass archives its record, not its renders** · 2026-09-17
+Measured on a real workspace: 1.7 GB of `logs/` out of 1.8 were page images of closed passes. A
+render is a cache: `collect.py --render` redraws it from the original in seconds, and what a closed
+pass must keep to be audited is `routing.json` and its logs. So Learn sends `renders/` to the OS
+bin, and keeps them archived on a machine that has none.
+
 ## Deferred
 
 **Following up the dossiers in flight** · 2026-09-17

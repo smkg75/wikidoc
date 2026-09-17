@@ -23,7 +23,7 @@ Scripts live in `scripts/` at the plugin root (`scripts/` sits beside `skills/`,
 
 ## The working file: `bench/routing.json`
 
-One entry per selected file; each actor writes only its columns; empty columns are the remaining work. `bench/` is the pass's working directory — archived to `logs/<pass>/` at Learn, never deleted.
+One entry per selected file; each actor writes only its columns; empty columns are the remaining work. `bench/` is the pass's working directory — archived to `logs/<pass>/` at Learn, never deleted; only its `renders/` go to the OS bin then, since `collect.py --render` redraws any of them from the original.
 
 | columns | writer | step |
 |---|---|---|

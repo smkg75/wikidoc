@@ -193,8 +193,9 @@ pass. Correct: `--learn` reports it BY NAME, writes its memory line with
 `decision: "unanswered"`, and the next collect selects it FIRST.
 
 **Bench archived** — end a pass with `--learn`. Correct: `bench/` is moved
-to `logs/<pass>/` (renders, routing.json and logs intact); it is never
-rmtree'd, and the next pass starts on a fresh bench.
+to `logs/<pass>/` (routing.json and logs intact); it is never rmtree'd, and
+the next pass starts on a fresh bench. `renders/` alone leaves the archive
+for the OS bin — redrawable from the originals — and stays when no bin exists.
 
 **Anchor check** — the grader's config lists an anchors file citing one
 backticked path that no longer resolves. Correct: `--learn` prints a

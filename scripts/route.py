@@ -733,13 +733,23 @@ def check_anchors(cfg):
 
 
 def archive_bench(ws, pass_name):
-    """bench/ moves whole to logs/<pass>/ — archived, never deleted."""
+    """bench/ moves to logs/<pass>/ — archived, never deleted. The renders are
+    the one exception: page images any session can redraw from the originals
+    (`collect.py --render`), and by far the heaviest thing a pass leaves. They
+    go to the OS bin when there is one, and stay in the archive when not."""
     bench = os.path.join(ws, "bench")
     dest, n = os.path.join(ws, "logs", pass_name), 2
     while os.path.exists(dest):
         dest, n = os.path.join(ws, "logs", f"{pass_name}-{n}"), n + 1
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     shutil.move(bench, dest)
+    renders = os.path.join(dest, "renders")
+    if os.path.isdir(renders):
+        try:
+            from send2trash import send2trash
+            send2trash(renders)
+        except Exception:
+            pass
     return dest
 
 
