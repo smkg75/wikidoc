@@ -115,8 +115,16 @@ born `status: shadow`, counters at 0, `learned_from` filled — evaluated every
 pass, never applied until the user promotes them. Create empty `memory.jsonl`;
 complete `wiki/context.md`.
 
-Done when `config.yaml` parses, `memory.py stats` prints an empty memory, and
-everyone the user named has an entry under `entities:`.
+Then make the workspace a git repository: `git init` at its root, local, with
+no remote — it holds private facts and stays on this machine. `.gitignore`:
+`logs/`, `cache/`, `bench/`, `.trash/`, `.DS_Store`, `*.bak*`. First commit: `setup`.
+From here on the repository is the backup: every pass and every tidy commits
+before and after itself, so a change to `config.yaml`, to the ledger or to the
+wiki is always one `git show` away, and one `git revert` from undone.
+
+Done when `config.yaml` parses, `memory.py stats` prints an empty memory,
+everyone the user named has an entry under `entities:`, and `git log` shows
+the `setup` commit with no remote configured.
 
 ## 6. ANCHOR
 

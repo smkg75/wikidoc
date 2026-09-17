@@ -69,6 +69,14 @@ one. The same log gives the incremental scope, the diff since the last tidy, whi
 weekly run cheap: a first full run measured around 600 K tokens, nearly all of it in the two
 families that read the long files.
 
+**The whole workspace is versioned, not the wiki alone** · 2026-09-17
+The repository first stopped at `wiki/`, and the same day a `.bak` of the ledger was made before a
+risky rewrite. The user's question: why a backup, now that there is git? Because git did not reach
+the ledger. So the repository sits at the workspace root: `config.yaml`, `memory.jsonl` and `wiki/`
+are versioned together, `logs/`, `cache/` and `bench/` are ignored, and there is never a remote,
+since the workspace holds private facts. `setup` creates it, a pass commits before itself and at
+Learn, a tidy before and after its clean, and `.bak` copies are retired to the OS bin.
+
 **A fact is settled by a dated replacement or by its source, never by recency** · 2026-09-17
 Measured on the first run: of the ten most severe findings, one was a false alarm and one could
 not be decided from the wiki alone. A clean that picked the most recent of two lines would have

@@ -61,7 +61,7 @@ kind of document doesn't need thinking about twice.
 | Place | Holds |
 |---|---|
 | **the plugin** | the commands and the scripts — the same for everyone |
-| **your workspace** | `config.yaml` · `memory.jsonl` · `logs/` · `wiki/` — yours, in plain text |
+| **your workspace** | `config.yaml` · `memory.jsonl` · `logs/` · `wiki/` — yours, in plain text, versioned in a local git repository that never leaves your machine |
 
 The workspace is where your setup, your history and everything the agent learned
 about your documents lives. Copy it to another machine and you keep all of it.

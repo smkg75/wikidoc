@@ -6,7 +6,7 @@ argument-hint: "nothing for what changed since the last tidy, 'full' to read the
 
 # Tidy
 
-The upkeep of the wiki, done alone: examine, clean, report. The user reads what changed afterwards; nothing waits on them. Three things make that safe. The wiki is a local git repository, so every clean is one commit the user can read and revert. The examination is finished before the first edit, so each finding is checked against the state it was found in. And a fact is only ever settled by the wiki's own dated replacement or by its source document, never by a guess: what neither settles stays, as an open question.
+The upkeep of the wiki, done alone: examine, clean, report. The user reads what changed afterwards; nothing waits on them. Three things make that safe. The workspace is a local git repository, so every clean is one commit the user can read and revert. The examination is finished before the first edit, so each finding is checked against the state it was found in. And a fact is only ever settled by the wiki's own dated replacement or by its source document, never by a guess: what neither settles stays, as an open question.
 
 The audit of a filing rule is another thing: `route.py --audit`, in `skills/tri/SKILL.md`.
 
@@ -14,9 +14,9 @@ The audit of a filing rule is another thing: `route.py --audit`, in `skills/tri/
 
 Resolve the workspace: `$WIKIDOC_HOME`, default `~/.wikidoc`. No `wiki/index.md`: stop on "Run `/wikidoc:setup` first". Read `skills/wiki/SKILL.md`: its write rules bind every edit below.
 
-`wiki/` is a git repository, local, with no remote. Absent: `git init` it. Commit whatever is uncommitted as `before tidy <date>`: that commit holds everything sessions wrote since the last tidy.
+The workspace is a git repository, local, with no remote: `config.yaml`, the ledger and `wiki/` are versioned together. No `.git` at the workspace root: `git init` it there, `.gitignore` `logs/`, `cache/`, `bench/`, `.trash/`, `.DS_Store`, `*.bak*`. Commit whatever is uncommitted as `before tidy <date>`: that commit holds everything sessions wrote since the last one.
 
-The scope: `$ARGUMENTS` is `full`, or no `tidy <date>` commit exists yet, and the whole wiki is read. Otherwise the scope is the diff since the last `tidy` commit: the changed hunks, and for each fact they carry, the other places in the wiki that speak of the same subject, found by search. List every file under `wiki/`, recursively, with its line count.
+The scope: `$ARGUMENTS` is `full`, or no `tidy <date>` commit exists yet, and the whole wiki is read. Otherwise the scope is the diff of `wiki/` since the last `tidy` commit: the changed hunks, and for each fact they carry, the other places in the wiki that speak of the same subject, found by search. List every file under `wiki/`, recursively, with its line count.
 
 Done when: the `before` commit exists, the scope is a list of files and hunks, and the write rules are read.
 
@@ -29,7 +29,7 @@ Families 1, 2, 5 and 6 are mechanical: run them here. Families 3 and 4 read long
 3. **Facts** — two lines that contradict each other; a replaced fact still standing beside its replacement; the same fact with its detail in two files; one name under two spellings. A dated arbitration in `decisions.md` and the current rule in the file that owns it are two layers of one fact, by design.
 4. **State** — a dossier marked closed still listed as in flight; an open question the wiki answers elsewhere; a current-state line the disk contradicts; history settled in `state.md` or any file of current rules, which belongs in `log.md`: reports of past passes, closed questions, the event-by-event journal of a dossier.
 5. **Ledger** — a path whose last `memory.jsonl` line leaves the file in place (`none`, `tag`, `keep`, or no decision) and whose file is gone; an `unanswered` or `refused` line older than 30 days; a `bench/` holding a `routing.json`, which is an interrupted pass, or an empty one, which is debris.
-6. **Workshop** — backups beside `config.yaml` and `memory.jsonl`, and the weight of `logs/` by subfolder, each with size and date. A chronicle or a report a session left at the workspace root: the chronicle belongs in `log.md`, the report in `logs/`.
+6. **Workshop** — `.bak` copies beside `config.yaml` and `memory.jsonl`, which the repository has made redundant, and the weight of `logs/` by subfolder, each with size and date. A chronicle or a report a session left at the workspace root: the chronicle belongs in `log.md`, the report in `logs/`.
 
 And one family that is reported, never cleaned — **Deadlines**: every date in `state.md` by which someone must act, passed or within 14 days, with the last event recorded on it.
 
@@ -47,7 +47,7 @@ Each finding gets one of four fates.
 - The index: one pointing line per file.
 - A pointer to a moved target: re-pointed once the target is found on disk.
 - A current-state line the disk contradicts: rewritten from the disk.
-- Backups older than the latest of each file, unless the wiki cites them, and an empty `bench/`: to the OS bin.
+- `.bak` copies, unless the wiki cites them, and an empty `bench/`: to the OS bin. The repository is the backup.
 
 **Left as it is**, by rule: `decisions.md`, `log.md` and every dated archive are append-only, a dead link inside a dated entry is history. Anything outside the workspace belongs to the corpus and to `tri`. A file the wiki cites stays where it is cited. `logs/` of past passes are archives. `memory.jsonl` is the pass's to write: Ledger findings are reported, like the deadlines.
 
@@ -63,6 +63,6 @@ Done when: every finding has its fate, and `git diff` shows only edits a finding
 
 Write `logs/tidy-<date>.md` in the wiki's language, under a hundred lines: the deadlines first; then what was cleaned, one line each; what stays open, one line each with what would settle it; the count per family against the previous tidy, or "first run". Append one line to `wiki/log.md`: the date, `tidy`, cleaned, open, the report's path. The previous counts are read from the previous report.
 
-Then commit as `tidy <date>`. With the user present, close on the deadlines and the open questions, and on how to read the change: `git -C <wiki> show`.
+Then commit as `tidy <date>`. With the user present, close on the deadlines and the open questions, and on how to read the change: `git -C <workspace> show`.
 
 Done when: the report is written, the log line points at it, and the `tidy <date>` commit holds both.
