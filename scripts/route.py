@@ -672,20 +672,23 @@ def rule_report(cfg, hits, agreed, disagreed):
     return ripe, retire
 
 
-def pass_of(entries, mem, cfg):
-    """The pass being closed, read off the memory lines apply just wrote."""
-    votes = {}
-    for e in entries:
-        # a trashed file's `final` is "bin", which indexes nothing: its memory
-        # line lives under the path it had. A pass of nothing but removals used
-        # to collect zero votes and archive itself under the NEXT pass number.
-        final = e.get("final")
-        if not final or e.get("decision") == "trash":
-            final = e["path"]
-        rec = mem.by_path.get(nfc(rel_to_root(final, cfg)))
-        if rec and rec.get("pass"):
-            votes[rec["pass"]] = votes.get(rec["pass"], 0) + 1
-    return max(votes, key=votes.get) if votes else pass_id(mem)
+def pass_of(data, ws, mem):
+    """The pass being closed: the name apply fixed the first time it touched
+    this bench (routing.json `pass`, else bench/pass), so --learn records under
+    the same pass apply did. With no such name apply never ran, nothing of this
+    pass is in memory yet, and the next number is the pass's own.
+
+    It used to be voted from the entries' memory lines, and the leftovers
+    re-selected from an earlier pass outvoted the gestures of this one: a bench
+    of 14 untouched leftovers from pass -1 and 5 new gestures closed as pass -1,
+    wrote its unanswered lines under it and archived itself as logs/<-1>-2/.
+    """
+    name = data.get("pass") if isinstance(data, dict) else None
+    marker = os.path.join(ws, "bench", "pass")
+    if not name and os.path.exists(marker):
+        with open(marker, encoding="utf-8") as f:
+            name = f.read().strip() or None
+    return name or pass_id(mem)
 
 
 def check_anchors(cfg):
@@ -767,7 +770,7 @@ def cmd_learn(cfg):
     answered = [nfc(rel_to_root(e["path"], cfg)) for e in entries
                 if "triage" not in e and e.get("result")]
     mem = Memory(root=cfg["root"])
-    pass_name = pass_of(entries, mem, cfg)
+    pass_name = pass_of(data, ws, mem)
     cfg_path = os.path.join(ws, "config.yaml")
 
     hits, agreed, disagreed, diverging = score_shadows(entries, cfg)

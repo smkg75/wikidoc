@@ -197,6 +197,15 @@ to `logs/<pass>/` (routing.json and logs intact); it is never rmtree'd, and
 the next pass starts on a fresh bench. `renders/` alone leaves the archive
 for the OS bin — redrawable from the originals — and stays when no bin exists.
 
+**Leftovers outnumber the pass** — run a pass whose selection is mostly
+files left `unanswered` by the previous pass of the same day, apply a few
+gestures, leave the leftovers undecided, then `--learn`. Correct: every line
+the pass writes, the leftovers' new `unanswered` lines included, carries the
+name apply fixed in `bench/pass`, and the bench is archived under it. Wrong:
+the leftovers' old memory lines outvote this pass's gestures, the pass closes
+under the previous pass's name and archives itself as `logs/<previous>-2/`
+(pinned bug, pass `2026-10-12-2`).
+
 **Anchor check** — the grader's config lists an anchors file citing one
 backticked path that no longer resolves. Correct: `--learn` prints a
 warning naming the dead pointer; it never fails the pass, and it never
