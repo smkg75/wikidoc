@@ -1,10 +1,10 @@
 ---
-name: inbox
+name: quick-tri
 description: Quick filing pass over the inboxes alone (Desktop, Downloads) - a full tri pass sized on them, so nothing else in the corpus is read first. Use when the user asks to sort the Desktop or Downloads, or to clear the inboxes.
 argument-hint: "nothing for every inbox, or the name of one inbox (Desktop, Downloads)"
 ---
 
-# Inbox
+# Quick tri
 
 The quick pass: `skills/tri/SKILL.md` run with the argument `inboxes`, so collect selects the files of the inboxes and nothing else, and the vision barrier at route waits on them alone. Read that skill and follow it from ① to ⑥; the invariants, the delegations and the questions are the same, and this one only fixes the size and the order.
 
