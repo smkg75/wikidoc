@@ -206,6 +206,17 @@ the leftovers' old memory lines outvote this pass's gestures, the pass closes
 under the previous pass's name and archives itself as `logs/<previous>-2/`
 (pinned bug, pass `2026-10-12-2`).
 
+**Two sessions, one bench** — open a pass from one session (`collect.py`), and from a
+second session, while the first is alive, run `collect.py`, `route.py`, `apply.py`
+(dry-run too), `route.py --learn` and `compact.py`. Correct: each exits 3 naming the
+holder (session, pid, date), `bench/routing.json` and `bench/owner` are untouched, and the
+second session stops and tells the user. Wrong: it routes, applies or learns over the
+other's decisions (pinned incident, pass `2026-10-25-1`: two passes wrote one
+`routing.json`, one `--learn` archived the bench from under the other, four applied
+`move` lines vanished from the ledger). Then let the first session die: `route.py`
+adopts the bench and says so, `collect.py` refuses and says to resume, and of six
+sessions adopting at once exactly one succeeds.
+
 **Anchor check** — the grader's config lists an anchors file citing one
 backticked path that no longer resolves. Correct: `--learn` prints a
 warning naming the dead pointer; it never fails the pass, and it never

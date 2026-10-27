@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import unicodedata
 from datetime import datetime
@@ -282,6 +283,163 @@ def write_json_atomic(path, data):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
     os.replace(tmp, path)
+
+
+# ----------------------------------------------------------------- bench ----
+BENCH_BUSY = 3      # exit code of a script that met a bench held by another
+
+
+def holder_pid():
+    """The pid that outlives the scripts: the nearest `claude` ancestor.
+
+    A script lives a few seconds and a pass lives hours, so the script's own
+    pid says nothing about whether the pass is still there. The session is the
+    process above it. Run from a plain terminal there is no such ancestor, and
+    the parent shell stands in.
+    """
+    pid = os.getpid()
+    for _ in range(16):
+        try:
+            out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", str(pid)],
+                                 capture_output=True, text=True,
+                                 timeout=5).stdout.strip()
+            ppid, comm = out.split(None, 1)
+            ppid = int(ppid)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            break
+        if pid != os.getpid() and os.path.basename(comm) == "claude":
+            return pid
+        if ppid <= 1:
+            break
+        pid = ppid
+    return os.getppid()
+
+
+def pid_alive(pid):
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True             # it exists, it is only not ours
+    return True
+
+
+def _bench_files(ws):
+    bench = os.path.join(ws, "bench")
+    return bench, os.path.join(bench, "owner"), os.path.join(bench, "routing.json")
+
+
+def _read_owner(path):
+    """None: no owner file. {}: a file nobody can read — held by nobody."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return {}
+
+
+def _is_mine(owner, me):
+    return owner.get("pid") == me["pid"] or bool(
+        me["session"] and owner.get("session") == me["session"])
+
+
+def _whose(owner):
+    return ("session %s, pid %s, since %s, last script %s"
+            % (owner.get("session") or "?", owner.get("pid") or "?",
+               owner.get("since") or "?", owner.get("script") or "?"))
+
+
+def _bench_die(msg, code=BENCH_BUSY):
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def _lay_owner(owner_path, me):
+    """Create `owner` or lose the race. Written whole to a temp name, then
+    hard-linked into place: the link is atomic and fails when `owner` exists,
+    and nobody ever reads half a file."""
+    rec = {**me, "since": datetime.now().isoformat(timespec="seconds"),
+           "script": os.path.basename(sys.argv[0])}
+    os.makedirs(os.path.dirname(owner_path), exist_ok=True)
+    tmp = f"{owner_path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(rec, f)
+    try:
+        os.link(tmp, owner_path)
+        return True
+    except FileExistsError:
+        return False
+    finally:
+        os.unlink(tmp)
+
+
+def claim_bench(ws, collecting=False):
+    """One bench, one owner. Two passes on one bench overwrite each other's
+    decisions, and the `--learn` of one archives the bench from under the
+    other.
+
+    `bench/owner` holds the session and the pid of whoever opened the bench.
+    The owner is the caller (same pid, or same session across a restart): go
+    on. The owner is alive and someone else: exit BENCH_BUSY saying who. The
+    owner is gone: route, apply and learn adopt the bench — the old `owner` is
+    renamed away, an atomic step only one adopter wins — while collect, which
+    would overwrite the dead pass's decisions, refuses and says to resume.
+    A bench with a routing.json and no owner (made before the lock existed) is
+    treated the same way: adopted by the resumers, refused to collect.
+    """
+    bench, owner_path, routing = _bench_files(ws)
+    open_pass = os.path.exists(routing)
+    if not collecting and not open_pass:
+        return                  # no bench to hold: the caller says so itself
+    me = {"session": os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+          "pid": holder_pid()}
+    for _ in range(5):
+        owner = _read_owner(owner_path)
+        if owner is None:
+            if collecting and open_pass:
+                _bench_die("bench/routing.json is an open pass with no owner "
+                           "(opened before the lock existed). Resume it with "
+                           "route.py, apply.py --resume or route.py --learn; "
+                           "collect would overwrite its decisions.")
+            if _lay_owner(owner_path, me):
+                return
+            continue
+        if _is_mine(owner, me):
+            return
+        if pid_alive(owner.get("pid")):
+            _bench_die("bench held by another live session (%s). Two passes "
+                       "on one bench overwrite each other's decisions: stop, "
+                       "say who holds it, let the user decide." % _whose(owner))
+        if collecting and open_pass:
+            _bench_die("bench left open by a dead owner (%s). Resume it with "
+                       "route.py, apply.py --resume or route.py --learn; "
+                       "collect would overwrite its decisions." % _whose(owner))
+        try:
+            os.rename(owner_path, f"{owner_path}.dead-{os.getpid()}")
+        except FileNotFoundError:
+            continue            # another adopter renamed it first
+        print("bench adopted from a dead owner (%s)" % _whose(owner),
+              file=sys.stderr)
+    _bench_die("could not settle who owns the bench — look at "
+               f"{owner_path} and retry", code=1)
+
+
+def refuse_if_held_elsewhere(ws):
+    """For a writer that does not use the bench but must not run under a live
+    pass of someone else (compact.py rewrites memory.jsonl)."""
+    owner = _read_owner(_bench_files(ws)[1])
+    me = {"session": os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+          "pid": holder_pid()}
+    if owner and not _is_mine(owner, me) and pid_alive(owner.get("pid")):
+        _bench_die("a pass is running in another live session (%s) and keeps "
+                   "appending to memory.jsonl — wait for its --learn."
+                   % _whose(owner))
 
 
 # ---------------------------------------------------------------- memory ----

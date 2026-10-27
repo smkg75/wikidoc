@@ -32,8 +32,9 @@ import extract  # noqa: E402
 # the condition engine lives in extract.py: apply.py's trash probe runs the
 # SAME matcher, so there is exactly one notion of what a condition means
 from extract import COND, matches, sensitive_hit, _id_values, _squeeze  # noqa: E402
-from memory import (Memory, is_inside, nfc, norm, pass_id, rel_key,  # noqa: E402
-                    require_config, self_ingestion_guard, write_json_atomic)
+from memory import (Memory, claim_bench, is_inside, nfc, norm, pass_id,  # noqa: E402
+                    rel_key, require_config, self_ingestion_guard,
+                    write_json_atomic)
 
 TRIAGE = ("route", "propose", "residual", "skip")
 WEAK = {"name_matches", "path_under", "ext", "ext_in", "size_gt", "size_lt"}
@@ -329,6 +330,7 @@ def rel_dest(dest, cfg):
 
 
 def cmd_route(cfg):
+    claim_bench(cfg["workspace"])
     bench = os.path.join(cfg["workspace"], "bench")
     data, entries = load_routing(bench)
     mem = Memory(root=cfg["root"])       # the ledger is an INPUT here, not only
@@ -758,6 +760,7 @@ def archive_bench(ws, pass_name):
 
 def cmd_learn(cfg):
     ws = cfg["workspace"]
+    claim_bench(ws)
     data, entries = load_routing(os.path.join(ws, "bench"))
     # A result stamped without a triage is the answered-withdrawal path: the
     # user decided about a file nothing could read, apply performed it. The

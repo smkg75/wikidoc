@@ -38,9 +38,9 @@ import sys
 from fnmatch import fnmatch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from memory import (Memory, dir_fingerprint, file_md5, flatten,  # noqa: E402
-                    inbox_dirs, is_inside, nfc, pass_roots, require_config,
-                    self_ingestion_guard, write_json_atomic)
+from memory import (Memory, claim_bench, dir_fingerprint, file_md5,  # noqa: E402
+                    flatten, inbox_dirs, is_inside, nfc, pass_roots,
+                    require_config, self_ingestion_guard, write_json_atomic)
 import extract  # noqa: E402
 
 TEXT_CAP = 4000
@@ -331,6 +331,7 @@ def main():
         render_verb(cfg, args.render, args.pages)
         return
 
+    claim_bench(cfg["workspace"], collecting=True)
     mem = Memory(root=cfg["root"])
     limit = args.limit if args.limit is not None else int(cfg.get("batch_size", 600))
     ws = cfg["workspace"]

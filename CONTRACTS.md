@@ -51,7 +51,8 @@ undecided — its absence from memory IS the open question, and it belongs in
 - **evidence strength** — the 3/2/1 scale and the strength-1 cap:
   skills/tri/SKILL.md Invariants.
 - **bench/** — the pass's working directory inside the workspace. Archived to
-  `logs/<pass>/` at the end of a pass, never rmtree'd.
+  `logs/<pass>/` at the end of a pass, never rmtree'd. `bench/owner` is its lock
+  (below).
 - **unanswered** — a selected file that reached the end of a pass without a
   decision. Recorded by name, re-selected FIRST next pass, its question asked
   at session start.
@@ -252,6 +253,21 @@ duplicate group, no `needs_vision`, no reading — route sends it residual
 naming the target, a `none` decision gives it a memory line, and it stops
 being work. A dangling link never becomes an entry at all: its stat fails
 in the walk and it is counted and named under `ignored`.
+
+**The bench has one owner.** `bench/owner` is JSON `{session, pid, since, script}`: the
+`CLAUDE_CODE_SESSION_ID` of the caller, the pid of its nearest `claude` ancestor (a
+script lives seconds, the session lives the pass; no such ancestor, the parent shell
+stands in), the ISO date, the script that laid it. `memory.claim_bench` is the one
+door: `collect.py` lays the file (hard link of a temp file, atomic and exclusive);
+`route.py`, `apply.py` (dry-run too — it writes `bench/pass`) and `route.py --learn`
+check it, `compact.py` refuses while another live owner holds a bench. The caller is
+the owner when the pid or the session matches. Owner alive and someone else: exit 3,
+stderr names session, pid and date. Owner dead: the resumers adopt (the old file is
+renamed `owner.dead-<pid>`, a rename only one process wins) and say so on stderr;
+collect, which would overwrite the dead pass's decisions, refuses and says to resume.
+A bench with a `routing.json` and no `owner` (made before the lock) is treated as dead.
+`collect.py --render` takes no lock: it only draws pages. The archive carries `owner`
+to `logs/<pass>/`.
 
 Writes `bench/routing.json` + `bench/renders/` + `bench/logs/collect.log`
 (counts mirrored on stdout, broken down candidates/selected/remaining PER

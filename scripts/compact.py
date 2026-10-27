@@ -35,7 +35,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from memory import (Memory, dir_fingerprint, is_inside, nfc,  # noqa: E402
-                    require_config)
+                    refuse_if_held_elsewhere, require_config)
 
 
 def kept(rel_under, keep_globs):
@@ -59,6 +59,8 @@ def main():
     args = ap.parse_args()
 
     cfg = require_config()
+    if not args.dry_run:
+        refuse_if_held_elsewhere(cfg["workspace"])
     mem = Memory(root=cfg["root"])
     abs_dir = os.path.abspath(os.path.expanduser(args.dir))
     if not os.path.isdir(abs_dir):
@@ -121,6 +123,7 @@ def main():
     # rewrite: drop EVERY line (all generations) for the collapsed paths and
     # any previous line of this dir record, then append the fresh dir line
     dropped, out = 0, []
+    seen = os.stat(mem.path)
     with open(mem.path, encoding="utf-8") as f:
         for line in f:
             s = line.strip()
@@ -157,6 +160,12 @@ def main():
     tmp = mem.path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
+    now = os.stat(mem.path)
+    if (now.st_size, now.st_mtime_ns) != (seen.st_size, seen.st_mtime_ns):
+        os.unlink(tmp)          # a line was appended since we read: replacing
+        sys.exit(f"memory.jsonl changed while compacting — nothing replaced "
+                 f"(backup kept: {os.path.basename(bak)}). Re-run when no pass "
+                 "is appending.")
     os.replace(tmp, mem.path)
 
     # proof, not promise: reload and re-check the guard the next pass will use

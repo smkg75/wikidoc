@@ -118,6 +118,18 @@ render is a cache: `collect.py --render` redraws it from the original in seconds
 pass must keep to be audited is `routing.json` and its logs. So Learn sends `renders/` to the OS
 bin, and keeps them archived on a machine that has none.
 
+**A bench has one owner, and a live one is never overridden** · 2026-10-27
+A scheduled pass and a manual `/wikidoc:tri` ran on the same `bench/` for an afternoon: two sets of
+decisions in one `routing.json`, a `--learn` that archived the bench while the other session was still
+deciding, four applied gestures lost from the ledger. Nothing in the tool said a bench was taken. So
+`bench/owner` records the session and the pid of its `claude` process (the scripts die in seconds, the
+session lives the pass), `collect.py` lays it, and every script that acts on the bench checks it. A live
+owner stops the caller with exit 3 and its name; a dead one lets route, apply and learn adopt the bench,
+and never collect, which would overwrite what the dead pass decided. Only `compact.py` rewrites
+`memory.jsonl` (the pass's writes are `open(..., "a")`): it now refuses under a live foreign bench and
+drops its rewrite when the file changed since it read it. A concurrent-append race on the ledger was
+looked for with eight writers and not reproduced, so the append stays as it was.
+
 ## Deferred
 
 **Following up the dossiers in flight** · 2026-09-17

@@ -32,9 +32,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract  # noqa: E402
-from memory import (Memory, file_md5, is_inside, nfc, pass_id,  # noqa: E402
-                    pass_roots, require_config, self_ingestion_guard,
-                    write_json_atomic)
+from memory import (Memory, claim_bench, file_md5, is_inside, nfc,  # noqa: E402
+                    pass_id, pass_roots, require_config,
+                    self_ingestion_guard, write_json_atomic)
 
 MINIMAL = os.environ.get("WIKIDOC_MINIMAL") == "1"
 DECISIONS = ("move", "rename", "trash", "tag", "none")
@@ -295,6 +295,7 @@ def main():
     resume = "--resume" in sys.argv[1:]
     cfg = require_config()
     root = cfg["root"]
+    claim_bench(cfg["workspace"])      # dry-run included: apply writes bench/pass
     routing_path = os.path.join(cfg["workspace"], "bench", "routing.json")
     if not os.path.exists(routing_path):
         sys.exit(f"no {routing_path} — run collect, route and decide first")
